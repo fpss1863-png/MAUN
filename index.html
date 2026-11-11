@@ -201,24 +201,24 @@ function step(){
   lost=0;
   const sL=!!nL,sR=!!nR;
   let xl=L?xat(L,BH):null,xr=R?xat(R,BH):null;
-  if(sL&&sR){const w=xr-xl;if(w>BW*.3&&w<BW*.75)laneW=.95*laneW+.05*w}
+  if(sL&&sR){const w=xr-xl;if(w>BW*.3&&w<BW*.75)laneW=Math.min(BW*.7,Math.max(BW*.32,.9*laneW+.1*w))}
   if(xl!=null&&xr==null)xr=xl+laneW;if(xr!=null&&xl==null)xl=xr-laneW;
-  let text='لا توجد خطوط',alert=false,off=null;
+  let text='لا توجد خطوط',alert=false,off=null;const both=sL&&sR;
   if(xl!=null&&xr!=null&&Math.min(missL,missR)<=C.HOLD){
-    off=((xl+xr)/2-BW/2)/(xr-xl);const both=sL&&sR;
+    off=((xl+xr)/2-BW/2)/(xr-xl);
     if(both){if(lastOff!=null&&fn-lastBoth<=10&&Math.abs(off-lastOff)>.5){flash=45;bad=0;flashT=off<lastOff?'تغيير مسار لليسار':'تغيير مسار لليمين';logEvt(flashT)}
       lastOff=off;lastBoth=fn}
     text=both?'تمام':(sL||sR)?'خط واحد':'من الذاكرة'}
-  if(off!=null){
+  if(both&&off!=null){
     if(base==null){calib.push(off);text=`يتعلم وضعك ${calib.length}/${C.CALF}`;
       if(calib.length>=C.CALF)base=calib.slice().sort((a,b)=>a-b)[calib.length>>1]}
     else{bad=Math.abs(off-base)>C.WARN?bad+1:0;
       if(bad>=C.WARNF){text='انحراف عن المسار!';alert=true;if(bad==C.WARNF){beep();logEvt('انحراف عن المسار')}}}}
-  else bad=0;
+  else if(!both)bad=Math.max(0,bad-2);
   if(flash>0&&!alert){flash--;if(off!=null)text=flashT}
-  if(fn%6==0){emL=emR=null;
-    if(R&&!carR&&!carI){const a=Math.round(xat(R,BH)+.25*laneW),b=Math.min(BW,Math.round(xat(R,BH)+.8*laneW));if(b-a>10)emR=findLine(a,b,null)}
-    if(L&&!carL&&!carI){const b=Math.round(xat(L,BH)-.25*laneW),a=Math.max(0,Math.round(xat(L,BH)-.8*laneW));if(b-a>10)emL=findLine(a,b,null)}
+  if(fn%6==0){emL=emR=null;const gap=Math.max(14,.22*laneW),gap2=Math.min(BW,.8*laneW);
+    if(both&&R&&!carR&&!carI){const a=Math.round(xat(R,BH)+gap),b=Math.min(BW,Math.round(xat(R,BH)+gap2));if(b-a>10)emR=findLine(a,b,null)}
+    if(both&&L&&!carL&&!carI){const b=Math.round(xat(L,BH)-gap),a=Math.max(0,Math.round(xat(L,BH)-gap2));if(b-a>10)emL=findLine(a,b,null)}
     yL=!!L&&isY(L,d);yR=!!R&&isY(R,d)}
   if(fn%4==0){const b=findSign(d);if(b){sgnN++;if(sgnN>=2&&!sgnBusy&&performance.now()-sgnLast>700){sgnLast=performance.now();readSign(b)}}else sgnN=0}
   const sg=$('sign'),sOn=sgnVal&&performance.now()-sgnSeen<10000;sg.style.display=sOn?'flex':'none';if(sOn)sg.textContent=sgnVal;
