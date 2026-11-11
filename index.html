@@ -88,13 +88,13 @@ const gray=new Uint8Array(PW*PH),mask=new Uint8Array(PW*PH);
 const bev=new Uint8Array(BW*BH),acc=new Float32Array(BW*BH),bin=new Uint8Array(BW*BH);
 let L=null,R=null,missL=0,missR=0,rejL=0,rejR=0,laneW=BW*.5,calib=[],base=null,bad=0,
     lastOff=null,lastBoth=-999,flash=0,cl=0,cr=0,fn=0,lastBeep=0,actx=null;
-let lost=0,ci=0,DK=.65,THR=100,sens=parseFloat(localStorage.getItem('lanesens')||'1'),fixT=0,flashT='تغيير مسار',emL=null,emR=null,yL=false,yR=false,testMode=false,sgnBusy=false,sgnN=0,sgnLast=0,sgnVal=null,sgnSeen=0,sgnCand=null,worker=null;
+let lost=0,ci=0,DK=.65,THR=100,sens=parseFloat(localStorage.getItem('lanesens')||'1'),fixT=0,wasAlert=false,alertAt=0,autoN=0,flashT='تغيير مسار',emL=null,emR=null,yL=false,yR=false,testMode=false,sgnBusy=false,sgnN=0,sgnLast=0,sgnVal=null,sgnSeen=0,sgnCand=null,worker=null;
 
 function setCalib(p){pts=p;
   yF=Math.min(p[0][1],p[1][1])|0;yN=Math.max(p[2][1],p[3][1])|0;
   Hi=homography([[BW*.25,0],[BW*.75,0],[BW*.75,BH],[BW*.25,BH]],p);
   L=R=null;base=null;calib=[];bad=0;}
-function resetCalib(){pts=[];Hi=null;if(!testMode)localStorage.removeItem('lanepts');
+function resetCalib(){pts=[];Hi=null;autoN=0;if(!testMode)localStorage.removeItem('lanepts');
   $('msg').textContent='اضغط على الشاشة 4 نقاط على خطي مسارك: 1 بعيد-يسار، 2 بعيد-يمين، 3 قريب-يمين، 4 قريب-يسار (فوق الكبوت).'}
 ov.addEventListener('pointerdown',e=>{if(Hi||!running)return;
   const r=ov.getBoundingClientRect();pts.push([(e.clientX-r.left)/r.width*PW,(e.clientY-r.top)/r.height*PH]);
@@ -219,8 +219,14 @@ function step(){
       const need=Math.round(C.WARNF*sens);
       if(bad>=need){text='انحراف عن المسار!';alert=true;fixT=performance.now();if(bad==need){beep();logEvt('انحراف عن المسار')}}}}
   else if(!both)bad=Math.max(0,bad-2);
+  const now=performance.now();
+  if(alert&&!wasAlert)alertAt=now;
+  if(!alert&&wasAlert&&now-alertAt<1500&&base!=null&&off!=null&&Math.abs(off-base)<C.WARN*sens*.6&&autoN<3){
+    sens=Math.min(2.2,sens+.05);localStorage.setItem('lanesens',sens.toFixed(2));autoN++;
+    logEvt('تصحيح تلقائي (حساسية الآن x'+sens.toFixed(2)+')')}
+  wasAlert=alert;
   if(flash>0&&!alert){flash--;if(off!=null)text=flashT}
-  $('fix').style.display=(alert&&performance.now()-fixT<8000)?'block':'none';
+  $('fix').style.display=(alert&&now-fixT<8000)?'block':'none';
   if(fn%6==0){emL=emR=null;const gap=Math.max(14,.22*laneW),gap2=Math.min(BW,.8*laneW);
     if(both&&R&&!carR&&!carI){const a=Math.round(xat(R,BH)+gap),b=Math.min(BW,Math.round(xat(R,BH)+gap2));if(b-a>10)emR=findLine(a,b,null)}
     if(both&&L&&!carL&&!carI){const b=Math.round(xat(L,BH)-gap),a=Math.max(0,Math.round(xat(L,BH)-gap2));if(b-a>10)emL=findLine(a,b,null)}
