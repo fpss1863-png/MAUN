@@ -51,7 +51,7 @@ button.main{background:#2563eb;border-color:#2563eb}
   <button id="back" style="display:none">رجوع للكاميرا</button>
 </div>
 <script>
-const C={PW:480,PH:270,BW:120,BH:150,P:91,MINL:110,SM:.2,MISS:45,HOLD:30,CAR:250,WARN:.25,WARNF:20,CALF:60};
+const C={PW:480,PH:270,BW:120,BH:150,P:91,MINL:110,SM:.3,MISS:45,HOLD:30,CAR:250,WARN:.25,WARNF:20,CALF:60};
 const {PW,PH,BW,BH}=C, OW=960, OH=540, K=OW/PW;
 const $=id=>document.getElementById(id);
 const video=$('video'),ov=$('ov'),octx=ov.getContext('2d');
@@ -115,25 +115,27 @@ function makeBev(){let carL=0,carR=0,carC=0;
       bev[by*BW+bx]=(xi>=0&&xi<PW&&yi>=yF&&yi<yN)?mask[yi*PW+xi]:0}
     const o=by*BW;let bx=0;
     while(bx<BW){if(!bev[o+bx]){bx++;continue}const s=bx;while(bx<BW&&bev[o+bx])bx++;
-      if(bx-s>BW*.12){for(let k=s;k<bx;k++)bev[o+k]=0;const c=(s+bx)/2,a=L?xat(L,by):null,b=R?xat(R,by):null;
+      if(bx-s>BW*(by<BH*.4?.3:.14)){for(let k=s;k<bx;k++)bev[o+k]=0;const c=(s+bx)/2,a=L?xat(L,by):null,b=R?xat(R,by):null;
         if(a!=null&&b!=null&&c>a&&c<b)carC+=bx-s;else (c<BW/2)?carL+=bx-s:carR+=bx-s}}}
   for(let i=0;i<bev.length;i++){acc[i]=DK*acc[i]+(1-DK)*bev[i]*255;bin[i]=acc[i]>THR?1:0}
   return[carL,carR,carC]}
 function findLine(xs0,xe,prevX){
   const hist=new Float32Array(xe-xs0);let tot=0;
-  for(let y=0;y<BH;y++)for(let x=xs0;x<xe;x++)if(bin[y*BW+x]){hist[x-xs0]++;tot++}
-  if(tot<10)return null;
+  for(let y=BH>>1;y<BH;y++)for(let x=xs0;x<xe;x++)if(bin[y*BW+x]){hist[x-xs0]++;tot++}
+  if(tot<6)return null;
   const h2=new Float32Array(hist.length);
   for(let i=0;i<hist.length;i++){for(let j=-2;j<=2;j++)h2[i]+=hist[i+j]||0;
     if(prevX!=null&&prevX>=xs0&&prevX<xe)h2[i]*=Math.exp(-((i+xs0-prevX)**2)/200)}
   let cur=xs0,best=-1;for(let i=0;i<h2.length;i++)if(h2[i]>best){best=h2[i];cur=xs0+i}
-  const nw=10,wh=BH/nw,px=[],py=[];let hits=0;
+  const nw=12,wh=BH/nw,px=[],py=[];let hits=0,v=0;
   for(let i=0;i<nw;i++){const yh=BH-i*wh,yl=yh-wh;let sx=0,n=0;const tx=[],ty=[];
-    for(let y=Math.floor(yl);y<yh;y++)for(let x=Math.max(0,cur-10);x<Math.min(BW,cur+10);x++)
+    const cx=Math.max(0,Math.min(BW-1,cur+Math.round(v)));
+    for(let y=Math.floor(yl);y<yh;y++)for(let x=Math.max(0,cx-12);x<Math.min(BW,cx+12);x++)
       if(bin[y*BW+x]){tx.push(x);ty.push(y);sx+=x;n++}
-    if(n>4){cur=Math.round(sx/n);px.push(...tx);py.push(...ty);hits++}}
+    if(n>4){const nc=Math.round(sx/n);v=.5*v+.5*(nc-cur);cur=nc;px.push(...tx);py.push(...ty);hits++}
+    else{cur=cx;v*=.8}}
   if(hits<3||px.length<25)return null;
-  const deg=hits>=7?2:1;let c=polyfit(py,px,deg);
+  const deg=hits>=5?2:1;let c=polyfit(py,px,deg);
   for(let t=0;t<2;t++){const ky=[],kx=[];
     for(let i=0;i<px.length;i++)if(Math.abs(xat(c,py[i])-px[i])<3){ky.push(py[i]);kx.push(px[i])}
     if(kx.length<20)break;c=polyfit(ky,kx,deg)}
