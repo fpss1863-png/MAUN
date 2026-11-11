@@ -29,6 +29,7 @@ button{background:var(--btn);color:var(--fg);border:1px solid #333b45;border-rad
 #log{display:none;width:min(560px,94vw);max-height:30vh;overflow:auto;background:#12161b;border:1px solid #2a313a;border-radius:10px;padding:8px 12px;font-size:14px}
 #log div{padding:3px 0;border-bottom:1px solid #222a33}
 #sign{position:absolute;top:8px;inset-inline-end:8px;width:clamp(48px,9vw,84px);aspect-ratio:1;border-radius:50%;border:clamp(5px,1vw,9px) solid #e11d1d;background:#fff;color:#000;font-weight:800;font-size:clamp(20px,4.5vw,38px);display:none;align-items:center;justify-content:center}
+#fix{position:absolute;top:50px;inset-inline-start:8px;display:none;background:#fff;color:#000;border:none;border-radius:8px;padding:6px 12px;font-weight:700;font-size:14px}
 button.main{background:#2563eb;border-color:#2563eb}
 </style>
 </head>
@@ -37,6 +38,7 @@ button.main{background:#2563eb;border-color:#2563eb}
   <video id="video" playsinline muted></video>
   <canvas id="ov" width="960" height="540"></canvas>
   <div id="status">اضغط ابدأ</div>
+  <button id="fix">ما فيه انحراف، صحّح</button>
   <div id="sign"></div>
   <canvas id="bev" width="120" height="150"></canvas>
 </div>
@@ -47,6 +49,7 @@ button.main{background:#2563eb;border-color:#2563eb}
   <button id="cal">إعادة المعايرة</button>
   <button id="logb">سجل التنبيهات</button>
   <button id="dbg">نافذة المنظور</button>
+  <button id="learnrst">إعادة ضبط التعلّم</button>
   <button id="up">فحص فيديو</button><input id="file" type="file" accept="video/*" hidden>
   <button id="back" style="display:none">رجوع للكاميرا</button>
 </div>
@@ -85,7 +88,7 @@ const gray=new Uint8Array(PW*PH),mask=new Uint8Array(PW*PH);
 const bev=new Uint8Array(BW*BH),acc=new Float32Array(BW*BH),bin=new Uint8Array(BW*BH);
 let L=null,R=null,missL=0,missR=0,rejL=0,rejR=0,laneW=BW*.5,calib=[],base=null,bad=0,
     lastOff=null,lastBoth=-999,flash=0,cl=0,cr=0,fn=0,lastBeep=0,actx=null;
-let lost=0,ci=0,DK=.65,THR=100,flashT='تغيير مسار',emL=null,emR=null,yL=false,yR=false,testMode=false,sgnBusy=false,sgnN=0,sgnLast=0,sgnVal=null,sgnSeen=0,sgnCand=null,worker=null;
+let lost=0,ci=0,DK=.65,THR=100,sens=parseFloat(localStorage.getItem('lanesens')||'1'),fixT=0,flashT='تغيير مسار',emL=null,emR=null,yL=false,yR=false,testMode=false,sgnBusy=false,sgnN=0,sgnLast=0,sgnVal=null,sgnSeen=0,sgnCand=null,worker=null;
 
 function setCalib(p){pts=p;
   yF=Math.min(p[0][1],p[1][1])|0;yN=Math.max(p[2][1],p[3][1])|0;
@@ -212,10 +215,12 @@ function step(){
   if(both&&off!=null){
     if(base==null){calib.push(off);text=`يتعلم وضعك ${calib.length}/${C.CALF}`;
       if(calib.length>=C.CALF)base=calib.slice().sort((a,b)=>a-b)[calib.length>>1]}
-    else{bad=Math.abs(off-base)>C.WARN?bad+1:0;
-      if(bad>=C.WARNF){text='انحراف عن المسار!';alert=true;if(bad==C.WARNF){beep();logEvt('انحراف عن المسار')}}}}
+    else{bad=Math.abs(off-base)>C.WARN*sens?bad+1:0;
+      const need=Math.round(C.WARNF*sens);
+      if(bad>=need){text='انحراف عن المسار!';alert=true;fixT=performance.now();if(bad==need){beep();logEvt('انحراف عن المسار')}}}}
   else if(!both)bad=Math.max(0,bad-2);
   if(flash>0&&!alert){flash--;if(off!=null)text=flashT}
+  $('fix').style.display=(alert&&performance.now()-fixT<8000)?'block':'none';
   if(fn%6==0){emL=emR=null;const gap=Math.max(14,.22*laneW),gap2=Math.min(BW,.8*laneW);
     if(both&&R&&!carR&&!carI){const a=Math.round(xat(R,BH)+gap),b=Math.min(BW,Math.round(xat(R,BH)+gap2));if(b-a>10)emR=findLine(a,b,null)}
     if(both&&L&&!carL&&!carI){const b=Math.round(xat(L,BH)-gap),a=Math.max(0,Math.round(xat(L,BH)-gap2));if(b-a>10)emL=findLine(a,b,null)}
@@ -269,6 +274,9 @@ $('start').onclick=async()=>{
     if(saved){setCalib(JSON.parse(saved));$('msg').textContent='المعايرة محفوظة. ثبّت الجوال وانطلق.'}else resetCalib();
   }catch(e){$('msg').textContent='ما اشتغلت الكاميرا: '+e.message+' (لازم https وإذن الكاميرا)'}};
 $('cal').onclick=()=>{if(running)resetCalib()};
+$('fix').onclick=()=>{sens=Math.min(2.5,sens+.2);localStorage.setItem('lanesens',sens.toFixed(2));
+  bad=0;flash=0;$('fix').style.display='none';logEvt('تصحيح مستخدم (حساسية الآن x'+sens.toFixed(1)+')')};
+$('learnrst').onclick=()=>{sens=1;localStorage.setItem('lanesens','1');logEvt('إعادة ضبط التعلّم')};
 $('logb').onclick=()=>{const b=$('log');b.style.display=b.style.display=='block'?'none':'block';showLog()};
 $('dbg').onclick=()=>{showBev=!showBev;bevC.style.display=showBev?'block':'none'};
 $('up').onclick=()=>{actx=actx||new (window.AudioContext||window.webkitAudioContext)();$('file').click()};
