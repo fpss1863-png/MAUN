@@ -1,0 +1,224 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>مساعد المسار</title>
+<meta name="theme-color" content="#0b0d10">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="مساعد المسار">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="icon-180.png">
+<link rel="icon" href="icon-192.png">
+<style>
+:root{--bg:#0b0d10;--fg:#f2f4f7;--warn:#ff3b30;--mut:#8b95a1;--btn:#1c2128}
+*{box-sizing:border-box}
+html,body{margin:0;height:100%;background:var(--bg);color:var(--fg);font-family:system-ui,-apple-system,"Segoe UI",Tahoma,sans-serif}
+body{display:flex;flex-direction:column;align-items:center;gap:8px;padding:env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left)}
+#stage{position:relative;width:min(100vw,calc((100vh - 110px)*16/9));aspect-ratio:16/9;background:#000;margin-top:6px}
+#stage video,#stage canvas{position:absolute;inset:0;width:100%;height:100%}
+#video{object-fit:fill}
+#status{position:absolute;top:8px;inset-inline-start:8px;font-weight:700;font-size:clamp(15px,3vw,26px);padding:4px 12px;border-radius:10px;background:rgba(0,0,0,.6)}
+#status.alert{background:var(--warn)}
+#bev{inset:auto !important;bottom:8px;inset-inline-end:8px;width:84px !important;height:105px !important;image-rendering:pixelated;border:1px solid #fff5;background:#000}
+#msg{color:var(--mut);font-size:14px;text-align:center;padding:0 12px;min-height:20px}
+#bar{display:flex;gap:8px;flex-wrap:wrap;justify-content:center;padding-bottom:8px}
+button{background:var(--btn);color:var(--fg);border:1px solid #333b45;border-radius:10px;padding:10px 16px;font-size:15px}
+#log{display:none;width:min(560px,94vw);max-height:30vh;overflow:auto;background:#12161b;border:1px solid #2a313a;border-radius:10px;padding:8px 12px;font-size:14px}
+#log div{padding:3px 0;border-bottom:1px solid #222a33}
+button.main{background:#2563eb;border-color:#2563eb}
+</style>
+</head>
+<body>
+<div id="stage">
+  <video id="video" playsinline muted></video>
+  <canvas id="ov" width="960" height="540"></canvas>
+  <div id="status">اضغط ابدأ</div>
+  <canvas id="bev" width="120" height="150"></canvas>
+</div>
+<div id="msg">ضع الجوال أفقياً على الزجاج الأمامي.</div>
+<div id="log"></div>
+<div id="bar">
+  <button id="start" class="main">ابدأ الكاميرا</button>
+  <button id="cal">إعادة المعايرة</button>
+  <button id="logb">سجل التنبيهات</button>
+  <button id="dbg">نافذة المنظور</button>
+</div>
+<script>
+const C={PW:480,PH:270,BW:120,BH:150,P:91,MINL:110,SM:.2,MISS:45,HOLD:30,CAR:250,WARN:.25,WARNF:20,CALF:60};
+const {PW,PH,BW,BH}=C, OW=960, OH=540, K=OW/PW;
+const $=id=>document.getElementById(id);
+const video=$('video'),ov=$('ov'),octx=ov.getContext('2d');
+const pc=document.createElement('canvas');pc.width=PW;pc.height=PH;
+const pctx=pc.getContext('2d',{willReadFrequently:true});
+const bevC=$('bev'),bctx=bevC.getContext('2d');
+
+// ---------- رياضيات ----------
+function solve(A){const n=A.length;
+  for(let i=0;i<n;i++){let m=i;for(let r=i+1;r<n;r++)if(Math.abs(A[r][i])>Math.abs(A[m][i]))m=r;
+    [A[i],A[m]]=[A[m],A[i]];
+    for(let r=i+1;r<n;r++){const f=A[r][i]/A[i][i];for(let c=i;c<=n;c++)A[r][c]-=f*A[i][c]}}
+  const x=new Array(n);
+  for(let i=n-1;i>=0;i--){let s=A[i][n];for(let j=i+1;j<n;j++)s-=A[i][j]*x[j];x[i]=s/A[i][i]}
+  return x}
+function homography(s,d){const A=[];
+  for(let i=0;i<4;i++){const[x,y]=s[i],[u,v]=d[i];
+    A.push([x,y,1,0,0,0,-u*x,-u*y,u]);A.push([0,0,0,x,y,1,-v*x,-v*y,v])}
+  return [...solve(A),1]}
+function apply(H,x,y){const w=H[6]*x+H[7]*y+H[8];return[(H[0]*x+H[1]*y+H[2])/w,(H[3]*x+H[4]*y+H[5])/w]}
+function polyfit(ys,xs,deg){const n=deg+1,A=Array.from({length:n},()=>new Array(n+1).fill(0));
+  for(let k=0;k<ys.length;k++){const p=[];for(let i=0;i<n;i++)p.push(ys[k]**(deg-i));
+    for(let i=0;i<n;i++){for(let j=0;j<n;j++)A[i][j]+=p[i]*p[j];A[i][n]+=p[i]*xs[k]}}
+  const s=solve(A);return deg==2?s:[0,...s]}
+const xat=(c,y)=>c[0]*y*y+c[1]*y+c[2];
+const blend=(o,n)=>o?o.map((v,i)=>v*(1-C.SM)+n[i]*C.SM):n;
+
+// ---------- حالة ----------
+let pts=[],Hi=null,yF=0,yN=0,running=false,showBev=false;
+const gray=new Uint8Array(PW*PH),mask=new Uint8Array(PW*PH);
+const bev=new Uint8Array(BW*BH),acc=new Float32Array(BW*BH),bin=new Uint8Array(BW*BH);
+let L=null,R=null,missL=0,missR=0,rejL=0,rejR=0,laneW=BW*.5,calib=[],base=null,bad=0,
+    lastOff=null,lastBoth=-999,flash=0,cl=0,cr=0,fn=0,lastBeep=0,actx=null;
+
+function setCalib(p){pts=p;
+  yF=Math.min(p[0][1],p[1][1])|0;yN=Math.max(p[2][1],p[3][1])|0;
+  Hi=homography([[BW*.25,0],[BW*.75,0],[BW*.75,BH],[BW*.25,BH]],p);
+  L=R=null;base=null;calib=[];bad=0;}
+function resetCalib(){pts=[];Hi=null;localStorage.removeItem('lanepts');
+  $('msg').textContent='اضغط على الشاشة 4 نقاط على خطي مسارك: 1 بعيد-يسار، 2 بعيد-يمين، 3 قريب-يمين، 4 قريب-يسار (فوق الكبوت).'}
+ov.addEventListener('pointerdown',e=>{if(Hi||!running)return;
+  const r=ov.getBoundingClientRect();pts.push([(e.clientX-r.left)/r.width*PW,(e.clientY-r.top)/r.height*PH]);
+  if(pts.length==4){if(pts[0][1]<pts[3][1]&&pts[1][1]<pts[2][1]){
+      localStorage.setItem('lanepts',JSON.stringify(pts));setCalib(pts);$('msg').textContent='تمت المعايرة.'}
+    else{pts=[];$('msg').textContent='الترتيب غلط: النقاط البعيدة لازم تكون أعلى. أعد المحاولة.'}}});
+
+// ---------- المعالجة ----------
+function makeMask(d,relax){
+  mask.fill(0);const hist=new Uint32Array(256);let cnt=0;
+  for(let y=yF;y<yN;y++)for(let x=0;x<PW;x++){const i=(y*PW+x)*4,g=(d[i]*77+d[i+1]*150+d[i+2]*29)>>8;
+    gray[y*PW+x]=g;if(!(x&1)){hist[g]++;cnt++}}
+  const tgt=cnt*(C.P-3*relax)/100;let a=0,thr=0;for(;thr<255&&a<tgt;thr++)a+=hist[thr];
+  thr=Math.max(C.MINL-15*relax,thr);const dd=22-4*relax;
+  for(let y=yF;y<yN;y++){const k=2+Math.round(5*(y-yF)/Math.max(1,yN-yF));
+    for(let x=k;x<PW-k;x++){const o=y*PW+x,v=gray[o],i=o*4;
+      const thin=v>(gray[o-k]+gray[o+k])/2+dd;
+      if(thin&&(v>=thr||(d[i]>140&&d[i+1]>110&&d[i+2]<(d[i]+d[i+1])*.28)))mask[o]=1}}}
+function makeBev(){let carL=0,carR=0;
+  for(let by=0;by<BH;by++){for(let bx=0;bx<BW;bx++){const[x,y]=apply(Hi,bx,by),xi=x|0,yi=y|0;
+      bev[by*BW+bx]=(xi>=0&&xi<PW&&yi>=yF&&yi<yN)?mask[yi*PW+xi]:0}
+    const o=by*BW;let bx=0;
+    while(bx<BW){if(!bev[o+bx]){bx++;continue}const s=bx;while(bx<BW&&bev[o+bx])bx++;
+      if(bx-s>BW*.12){for(let k=s;k<bx;k++)bev[o+k]=0;((s+bx)/2<BW/2)?carL+=bx-s:carR+=bx-s}}}
+  for(let i=0;i<bev.length;i++){acc[i]=.65*acc[i]+.35*bev[i]*255;bin[i]=acc[i]>100?1:0}
+  return[carL,carR]}
+function findLine(xs0,xe,prevX){
+  const hist=new Float32Array(xe-xs0);let tot=0;
+  for(let y=0;y<BH;y++)for(let x=xs0;x<xe;x++)if(bin[y*BW+x]){hist[x-xs0]++;tot++}
+  if(tot<10)return null;
+  const h2=new Float32Array(hist.length);
+  for(let i=0;i<hist.length;i++){for(let j=-2;j<=2;j++)h2[i]+=hist[i+j]||0;
+    if(prevX!=null&&prevX>=xs0&&prevX<xe)h2[i]*=Math.exp(-((i+xs0-prevX)**2)/200)}
+  let cur=xs0,best=-1;for(let i=0;i<h2.length;i++)if(h2[i]>best){best=h2[i];cur=xs0+i}
+  const nw=10,wh=BH/nw,px=[],py=[];let hits=0;
+  for(let i=0;i<nw;i++){const yh=BH-i*wh,yl=yh-wh;let sx=0,n=0;const tx=[],ty=[];
+    for(let y=Math.floor(yl);y<yh;y++)for(let x=Math.max(0,cur-8);x<Math.min(BW,cur+8);x++)
+      if(bin[y*BW+x]){tx.push(x);ty.push(y);sx+=x;n++}
+    if(n>4){cur=Math.round(sx/n);px.push(...tx);py.push(...ty);hits++}}
+  if(hits<3||px.length<25)return null;
+  const deg=hits>=7?2:1;let c=polyfit(py,px,deg);
+  for(let t=0;t<2;t++){const ky=[],kx=[];
+    for(let i=0;i<px.length;i++)if(Math.abs(xat(c,py[i])-px[i])<3){ky.push(py[i]);kx.push(px[i])}
+    if(kx.length<20)break;c=polyfit(ky,kx,deg)}
+  if(Math.abs(c[0])>1.6e-3||Math.abs(c[1])>.6||Math.abs(2*c[0]*BH+c[1])>.6)return null;
+  return c}
+function accept(prev,nw,rej){
+  if(!nw||!prev||rej>=8)return nw;
+  const d=Math.max(Math.abs(xat(nw,BH*.3)-xat(prev,BH*.3)),Math.abs(xat(nw,BH)-xat(prev,BH)));
+  return d<.09*BW?nw:null}
+
+function beep(){const t=performance.now();if(!actx||t-lastBeep<2000)return;lastBeep=t;
+  const o=actx.createOscillator(),g=actx.createGain();o.frequency.value=1200;g.gain.value=.4;
+  o.connect(g);g.connect(actx.destination);o.start();o.stop(actx.currentTime+.25)}
+function logEvt(type){const a=JSON.parse(localStorage.getItem('lanelog')||'[]');
+  a.unshift({t:new Date().toLocaleString('ar-SA'),type});localStorage.setItem('lanelog',JSON.stringify(a.slice(0,200)))}
+function showLog(){const a=JSON.parse(localStorage.getItem('lanelog')||'[]'),b=$('log');
+  b.innerHTML=a.length?a.map(e=>`<div>${e.t} — ${e.type}</div>`).join(''):'لا توجد تنبيهات بعد.'}
+function setStatus(t,a){const s=$('status');s.textContent=t;s.classList.toggle('alert',!!a)}
+
+function step(){
+  fn++;const d=pctx.getImageData(0,0,PW,PH).data;
+  const relax=Math.min(3,Math.max(missL,missR)>>3);
+  makeMask(d,relax);const[carLpx,carRpx]=makeBev();
+  cl=carLpx>C.CAR?cl+1:0;cr=carRpx>C.CAR?cr+1:0;
+  const carL=cl>0&&cl<=90,carR=cr>0&&cr<=90,mid=BW/2;
+  let rawL=carL?null:findLine(0,mid,L?xat(L,BH):null);
+  let rawR=carR?null:findLine(mid,BW,R?xat(R,BH):null);
+  const nL=accept(L,rawL,rejL),nR=accept(R,rawR,rejR);
+  rejL=(rawL&&!nL)?rejL+1:0;rejR=(rawR&&!nR)?rejR+1:0;
+  if(nL){L=blend(L,nL);missL=0}else if(!carL){if(++missL>C.MISS)L=null}
+  if(nR){R=blend(R,nR);missR=0}else if(!carR){if(++missR>C.MISS)R=null}
+  const sL=!!nL,sR=!!nR;
+  let xl=L?xat(L,BH):null,xr=R?xat(R,BH):null;
+  if(sL&&sR){const w=xr-xl;if(w>BW*.3&&w<BW*.75)laneW=.95*laneW+.05*w}
+  if(xl!=null&&xr==null)xr=xl+laneW;if(xr!=null&&xl==null)xl=xr-laneW;
+  let text='لا توجد خطوط',alert=false,off=null;
+  if(xl!=null&&xr!=null&&Math.min(missL,missR)<=C.HOLD){
+    off=((xl+xr)/2-BW/2)/(xr-xl);const both=sL&&sR;
+    if(both){if(lastOff!=null&&fn-lastBoth<=10&&Math.abs(off-lastOff)>.5){flash=45;bad=0;logEvt('تغيير مسار')}
+      lastOff=off;lastBoth=fn}
+    text=both?'تمام':(sL||sR)?'خط واحد':'من الذاكرة'}
+  if(off!=null){
+    if(base==null){calib.push(off);text=`يتعلم وضعك ${calib.length}/${C.CALF}`;
+      if(calib.length>=C.CALF)base=calib.slice().sort((a,b)=>a-b)[calib.length>>1]}
+    else{bad=Math.abs(off-base)>C.WARN?bad+1:0;
+      if(bad>=C.WARNF){text='انحراف عن المسار!';alert=true;if(bad==C.WARNF){beep();logEvt('انحراف عن المسار')}}}}
+  else bad=0;
+  if(flash>0&&!alert){flash--;if(off!=null)text='تغيير مسار'}
+  setStatus(text+((carL||carR)?'  🚗 مركبة':''),alert);
+  draw(alert,carL,carR);
+}
+function draw(alert,carL,carR){
+  octx.clearRect(0,0,OW,OH);
+  if(L||R){const ys=[...Array(20)].map((_,i)=>i*BH/19);
+    const lx=ys.map(y=>L?xat(L,y):xat(R,y)-laneW),rx=ys.map(y=>R?xat(R,y):xat(L,y)+laneW);
+    const P=(x,y)=>{const[a,b]=apply(Hi,x,y);return[a*K,b*K]};
+    octx.beginPath();ys.forEach((y,i)=>{const[a,b]=P(lx[i],y);i?octx.lineTo(a,b):octx.moveTo(a,b)});
+    for(let i=19;i>=0;i--){const[a,b]=P(rx[i],ys[i]);octx.lineTo(a,b)}
+    octx.closePath();octx.fillStyle=alert?'rgba(255,59,48,.35)':'rgba(46,204,113,.3)';octx.fill();
+    [[lx,'#3b82f6'],[rx,'#22c55e']].forEach(([xs,col])=>{octx.beginPath();
+      xs.forEach((x,i)=>{const[a,b]=P(x,ys[i]);i?octx.lineTo(a,b):octx.moveTo(a,b)});
+      octx.strokeStyle=col;octx.lineWidth=5;octx.stroke()})}
+  if(alert){octx.strokeStyle='#ff3b30';octx.lineWidth=14;octx.strokeRect(0,0,OW,OH)}
+  if(showBev){const im=bctx.createImageData(BW,BH);
+    for(let i=0;i<bin.length;i++){const v=bin[i]?255:0;im.data.set([v,v,v,255],i*4)}bctx.putImageData(im,0,0)}
+}
+function idle(){ // أثناء المعايرة: نرسم النقاط
+  octx.clearRect(0,0,OW,OH);octx.fillStyle='#fde047';octx.strokeStyle='#22c55e';octx.lineWidth=3;
+  octx.beginPath();pts.forEach(([x,y],i)=>{i?octx.lineTo(x*K,y*K):octx.moveTo(x*K,y*K)});octx.stroke();
+  pts.forEach(([x,y],i)=>{octx.beginPath();octx.arc(x*K,y*K,8,0,7);octx.fill()})}
+function loop(){requestAnimationFrame(loop);
+  if(!running||video.readyState<2)return;
+  pctx.drawImage(video,0,0,PW,PH);
+  if(Hi)step();else{idle();setStatus('عايِر المسار (4 نقاط)',false)}}
+
+// ---------- أزرار ----------
+$('start').onclick=async()=>{
+  try{
+    actx=new (window.AudioContext||window.webkitAudioContext)();
+    const s=await navigator.mediaDevices.getUserMedia({video:{facingMode:{ideal:'environment'},width:{ideal:1280},height:{ideal:720}},audio:false});
+    video.srcObject=s;await video.play();running=true;$('start').style.display='none';
+    try{await navigator.wakeLock.request('screen')}catch(e){}
+    const saved=localStorage.getItem('lanepts');
+    if(saved){setCalib(JSON.parse(saved));$('msg').textContent='المعايرة محفوظة. ثبّت الجوال وانطلق.'}else resetCalib();
+  }catch(e){$('msg').textContent='ما اشتغلت الكاميرا: '+e.message+' (لازم https وإذن الكاميرا)'}};
+$('cal').onclick=()=>{if(running)resetCalib()};
+$('logb').onclick=()=>{const b=$('log');b.style.display=b.style.display=='block'?'none':'block';showLog()};
+$('dbg').onclick=()=>{showBev=!showBev;bevC.style.display=showBev?'block':'none'};
+bevC.style.display='none';
+loop();
+if('serviceWorker' in navigator)navigator.serviceWorker.register('sw.js').catch(()=>{});
+</script>
+</body>
+</html>
