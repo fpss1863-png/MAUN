@@ -13,45 +13,94 @@
 <link rel="apple-touch-icon" href="icon-180.png">
 <link rel="icon" href="icon-192.png">
 <style>
-:root{--bg:#0b0d10;--fg:#f2f4f7;--warn:#ff3b30;--mut:#8b95a1;--btn:#1c2128}
-*{box-sizing:border-box}
+:root{
+  --bg:#090c10;--panel:#121820;--panel2:#1a222b;--border:#2a333d;
+  --fg:#eef2f6;--mut:#8b97a3;--accent:#f2a93c;--accent-ink:#2a1c05;
+  --ok:#27c46b;--warn:#ff4438;--info:#3aa0ff
+}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
 html,body{margin:0;height:100%;background:var(--bg);color:var(--fg);font-family:system-ui,-apple-system,"Segoe UI",Tahoma,sans-serif}
-body{display:flex;flex-direction:column;align-items:center;gap:8px;padding:env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left)}
-#stage{position:relative;width:min(100vw,calc((100vh - 110px)*16/9));aspect-ratio:16/9;background:#000;margin-top:6px}
+body{display:flex;flex-direction:column;align-items:center;gap:10px;padding:calc(env(safe-area-inset-top) + 6px) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left)}
+.tnum{font-variant-numeric:tabular-nums;letter-spacing:.02em}
+
+#stage{position:relative;width:min(100vw,calc((100vh - 128px)*16/9));aspect-ratio:16/9;background:#000;border-radius:14px;overflow:hidden;box-shadow:0 0 0 1px var(--border),0 18px 40px -16px #000a}
 #stage video,#stage canvas{position:absolute;inset:0;width:100%;height:100%}
 #video{object-fit:fill}
-#status{position:absolute;top:8px;inset-inline-start:8px;font-weight:700;font-size:clamp(15px,3vw,26px);padding:4px 12px;border-radius:10px;background:rgba(0,0,0,.6)}
-#status.alert{background:var(--warn)}
-#bev{inset:auto !important;bottom:8px;inset-inline-end:8px;width:84px !important;height:105px !important;image-rendering:pixelated;border:1px solid #fff5;background:#000}
-#msg{color:var(--mut);font-size:14px;text-align:center;padding:0 12px;min-height:20px}
-#bar{display:flex;gap:8px;flex-wrap:wrap;justify-content:center;padding-bottom:8px}
-button{background:var(--btn);color:var(--fg);border:1px solid #333b45;border-radius:10px;padding:10px 16px;font-size:15px}
-#log{display:none;width:min(560px,94vw);max-height:30vh;overflow:auto;background:#12161b;border:1px solid #2a313a;border-radius:10px;padding:8px 12px;font-size:14px}
-#log div{padding:3px 0;border-bottom:1px solid #222a33}
-#sign{position:absolute;top:8px;inset-inline-end:8px;width:clamp(48px,9vw,84px);aspect-ratio:1;border-radius:50%;border:clamp(5px,1vw,9px) solid #e11d1d;background:#fff;color:#000;font-weight:800;font-size:clamp(20px,4.5vw,38px);display:none;align-items:center;justify-content:center}
-#fix{position:absolute;top:50px;inset-inline-start:8px;display:none;background:#fff;color:#000;border:none;border-radius:8px;padding:6px 12px;font-weight:700;font-size:14px}
-button.main{background:#2563eb;border-color:#2563eb}
+
+/* عدسة/مؤشر رصد بزوايا الإطار */
+.br{position:absolute;width:22px;height:22px;border:2px solid #ffffff55;pointer-events:none;z-index:2}
+.br.tl{top:10px;inset-inline-start:10px;border-inline-end:none;border-bottom:none;border-start-start-radius:8px}
+.br.tr{top:10px;inset-inline-end:10px;border-inline-start:none;border-bottom:none;border-start-end-radius:8px}
+.br.bl{bottom:10px;inset-inline-start:10px;border-inline-end:none;border-top:none;border-end-start-radius:8px}
+.br.br2{bottom:10px;inset-inline-end:10px;border-inline-start:none;border-top:none;border-end-end-radius:8px}
+
+#hud{position:absolute;top:10px;inset-inline-start:10px;z-index:3;display:flex;flex-direction:column;gap:6px;max-width:72%}
+#pill{display:flex;align-items:center;gap:8px;background:#0b0f14cc;backdrop-filter:blur(6px);border:1px solid #ffffff1a;border-radius:999px;padding:7px 14px 7px 10px;width:fit-content}
+#dot{width:9px;height:9px;border-radius:50%;background:var(--info);flex:none;box-shadow:0 0 0 3px #3aa0ff22}
+#pill.alert{background:#4a0f0dcc;border-color:#ff443855;animation:pulse 1s ease-in-out infinite}
+#pill.alert #dot{background:var(--warn);box-shadow:0 0 0 3px #ff443833}
+#statusTxt{font-weight:700;font-size:clamp(14px,2.6vw,21px)}
+@keyframes pulse{0%,100%{box-shadow:0 0 0 0 #ff443833}50%{box-shadow:0 0 0 7px #ff443800}}
+#chips{display:flex;flex-wrap:wrap;gap:6px}
+.chip{display:flex;align-items:center;gap:5px;background:#0b0f14b3;backdrop-filter:blur(6px);border:1px solid #ffffff1a;border-radius:999px;padding:4px 10px;font-size:clamp(11px,1.9vw,14px);color:var(--fg)}
+.chip::before{content:'';width:6px;height:6px;border-radius:50%}
+.chip-car::before{background:var(--info)}
+.chip-em::before{background:var(--accent)}
+.chip-y::before{background:#eab308}
+
+#bev{inset:auto !important;bottom:10px;inset-inline-end:10px;width:76px !important;height:95px !important;image-rendering:pixelated;border:1px solid #ffffff2a;border-radius:8px;background:#000;z-index:2;box-shadow:0 6px 16px -6px #000c}
+
+#sign{position:absolute;top:10px;inset-inline-end:10px;z-index:3;width:clamp(50px,9vw,80px);aspect-ratio:1;border-radius:50%;background:radial-gradient(circle at 35% 30%,#fff,#f4f4f4);box-shadow:inset 0 0 0 clamp(4px,.8vw,7px) #d61f1f,0 6px 16px -4px #000a;color:#111;font-weight:800;font-size:clamp(18px,4vw,34px);font-variant-numeric:tabular-nums;display:none;align-items:center;justify-content:center}
+
+#msg{color:var(--mut);font-size:13px;text-align:center;padding:0 12px;min-height:18px}
+
+#fix{position:absolute;top:60px;inset-inline-start:10px;z-index:3;display:none;align-items:center;gap:6px;background:var(--accent);color:var(--accent-ink);border:none;border-radius:999px;padding:7px 14px;font-weight:700;font-size:13px;box-shadow:0 6px 14px -4px #000a}
+
+#console{display:flex;align-items:stretch;gap:8px;padding:0 4px 4px;width:min(100vw,calc((100vh - 128px)*16/9));max-width:100%}
+#console .seg{display:flex;align-items:stretch;background:var(--panel);border:1px solid var(--border);border-radius:12px;overflow:hidden}
+button{all:unset;cursor:pointer;color:var(--fg);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;padding:9px 13px;font-size:11.5px;line-height:1.3;white-space:nowrap}
+#console .seg button+button{border-inline-start:1px solid var(--border)}
+#console .seg button:active{background:var(--panel2)}
+.ic{font-size:17px;line-height:1}
+button.main{background:var(--accent);color:var(--accent-ink);border-radius:12px;border:1px solid var(--accent);font-weight:700;font-size:14px;padding:10px 18px}
+button.main .ic{font-size:15px}
+#back{background:var(--panel);border:1px solid var(--border);border-radius:12px}
+
+#log{display:none;position:fixed;left:0;right:0;bottom:0;z-index:20;max-height:46vh;overflow:auto;background:var(--panel);border-top:1px solid var(--border);border-radius:16px 16px 0 0;box-shadow:0 -14px 30px -14px #000a;padding:6px 14px 14px;font-size:14px}
+#logh{position:sticky;top:0;background:var(--panel);display:flex;align-items:center;justify-content:space-between;padding:10px 2px 8px;font-weight:700}
+#logh button{all:unset;color:var(--mut);font-size:13px;padding:4px 8px}
+#log .row{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:9px 2px;border-top:1px solid var(--border)}
+#log .e{color:var(--fg)}
+#log .t{color:var(--mut);font-size:12.5px}
+#log .empty{color:var(--mut);text-align:center;padding:18px 4px}
 </style>
 </head>
 <body>
 <div id="stage">
   <video id="video" playsinline muted></video>
   <canvas id="ov" width="960" height="540"></canvas>
-  <div id="status">اضغط ابدأ</div>
-  <button id="fix">ما فيه انحراف، صحّح</button>
+  <span class="br tl"></span><span class="br tr"></span><span class="br bl"></span><span class="br br2"></span>
+  <div id="hud">
+    <div id="pill"><span id="dot"></span><span id="statusTxt">اضغط ابدأ</span></div>
+    <div id="chips"></div>
+  </div>
+  <button id="fix"><span class="ic">✓</span>ما فيه انحراف، صحّح</button>
   <div id="sign"></div>
   <canvas id="bev" width="120" height="150"></canvas>
 </div>
 <div id="msg">ضع الجوال أفقياً على الزجاج الأمامي.</div>
 <div id="log"></div>
-<div id="bar">
-  <button id="start" class="main">ابدأ الكاميرا</button>
-  <button id="cal">إعادة المعايرة</button>
-  <button id="logb">سجل التنبيهات</button>
-  <button id="dbg">نافذة المنظور</button>
-  <button id="learnrst">إعادة ضبط التعلّم</button>
-  <button id="up">فحص فيديو</button><input id="file" type="file" accept="video/*" hidden>
-  <button id="back" style="display:none">رجوع للكاميرا</button>
+<div id="console">
+  <button id="start" class="main"><span class="ic">▶</span>ابدأ الكاميرا</button>
+  <div class="seg">
+    <button id="cal"><span class="ic">⟲</span>معايرة</button>
+    <button id="logb"><span class="ic">🗒</span>السجل</button>
+    <button id="dbg"><span class="ic">◱</span>المنظور</button>
+    <button id="learnrst"><span class="ic">↺</span>تصفير التعلّم</button>
+    <button id="up"><span class="ic">⇪</span>فحص فيديو</button>
+  </div>
+  <input id="file" type="file" accept="video/*" hidden>
+  <button id="back" style="display:none"><span class="ic">↩</span>رجوع للكاميرا</button>
 </div>
 <script>
 const C={PW:480,PH:270,BW:120,BH:150,P:91,MINL:110,SM:.3,MISS:45,HOLD:30,CAR:250,WARN:.25,WARNF:20,CALF:60};
@@ -155,8 +204,12 @@ function beep(){const t=performance.now();if(!actx||t-lastBeep<2000)return;lastB
 function logEvt(type){const a=JSON.parse(localStorage.getItem('lanelog')||'[]');
   a.unshift({t:new Date().toLocaleString('ar-SA'),type});localStorage.setItem('lanelog',JSON.stringify(a.slice(0,200)))}
 function showLog(){const a=JSON.parse(localStorage.getItem('lanelog')||'[]'),b=$('log');
-  b.innerHTML=a.length?a.map(e=>`<div>${e.t} — ${e.type}</div>`).join(''):'لا توجد تنبيهات بعد.'}
-function setStatus(t,a){const s=$('status');s.textContent=t;s.classList.toggle('alert',!!a)}
+  const head='<div id="logh"><span>سجل التنبيهات</span><button id="logx">إغلاق</button></div>';
+  b.innerHTML=head+(a.length?a.map(e=>`<div class="row"><span class="e">${e.type}</span><span class="t tnum">${e.t}</span></div>`).join(''):'<div class="empty">لا توجد تنبيهات بعد.</div>');
+  $('logx').onclick=()=>{b.style.display='none'}}
+function setStatus(t,a,chips){
+  $('statusTxt').textContent=t;$('pill').classList.toggle('alert',!!a);
+  $('chips').innerHTML=(chips||[]).map(([k,l])=>`<span class="chip chip-${k}">${l}</span>`).join('')}
 
 const isY=(c,d)=>{let n=0,k=0;for(let y=BH*.3;y<BH;y+=6){const[a,b]=apply(Hi,xat(c,y),y),i=((b|0)*PW+(a|0))*4;
     if(a>=0&&a<PW&&b>=yF&&b<yN){k++;if(d[i]>130&&d[i+1]>100&&d[i+2]<(d[i]+d[i+1])*.3)n++}}return k>4&&n/k>.5};
@@ -233,8 +286,11 @@ function step(){
     yL=!!L&&isY(L,d);yR=!!R&&isY(R,d)}
   if(fn%4==0){const b=findSign(d);if(b){sgnN++;if(sgnN>=2&&!sgnBusy&&performance.now()-sgnLast>700){sgnLast=performance.now();readSign(b)}}else sgnN=0}
   const sg=$('sign'),sOn=sgnVal&&performance.now()-sgnSeen<10000;sg.style.display=sOn?'flex':'none';if(sOn)sg.textContent=sgnVal;
-  const ex=(carI?'  🚗 مركبة أمامك':(carL||carR)?'  🚗 مركبة بجانبك':'')+(emL?'  🛣 طوارئ يسار':'')+(emR?'  🛣 طوارئ يمين':'')+(yL?'  ● خط أصفر يسار':'')+(yR?'  ● خط أصفر يمين':'');
-  setStatus(text+ex,alert);
+  const chips=[];
+  if(carI)chips.push(['car','مركبة أمامك']);else if(carL||carR)chips.push(['car','مركبة بجانبك']);
+  if(emL)chips.push(['em','طوارئ يسار']);if(emR)chips.push(['em','طوارئ يمين']);
+  if(yL)chips.push(['y','خط أصفر يسار']);if(yR)chips.push(['y','خط أصفر يمين']);
+  setStatus(text,alert,chips);
   draw(alert,carL,carR);
 }
 function draw(alert,carL,carR){
