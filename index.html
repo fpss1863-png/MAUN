@@ -13,103 +13,53 @@
 <link rel="apple-touch-icon" href="icon-180.png">
 <link rel="icon" href="icon-192.png">
 <style>
-:root{
-  --bg:#090c10;--panel:#121820;--panel2:#1a222b;--border:#2a333d;
-  --fg:#eef2f6;--mut:#8b97a3;--accent:#f2a93c;--accent-ink:#2a1c05;
-  --ok:#27c46b;--warn:#ff4438;--info:#3aa0ff
-}
-*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+:root{--bg:#0b0d10;--fg:#f2f4f7;--warn:#ff3b30;--mut:#8b95a1;--btn:#1c2128}
+*{box-sizing:border-box}
 html,body{margin:0;height:100%;background:var(--bg);color:var(--fg);font-family:system-ui,-apple-system,"Segoe UI",Tahoma,sans-serif}
-body{display:flex;flex-direction:column;align-items:center;gap:10px;padding:calc(env(safe-area-inset-top) + 6px) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left)}
-.tnum{font-variant-numeric:tabular-nums;letter-spacing:.02em}
-
-#stage{position:relative;width:min(100vw,calc((100vh - 128px)*16/9));aspect-ratio:16/9;background:#000;border-radius:14px;overflow:hidden;box-shadow:0 0 0 1px var(--border),0 18px 40px -16px #000a}
+body{display:flex;flex-direction:column;align-items:center;gap:8px;padding:env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left)}
+#stage{position:relative;width:min(100vw,calc((100vh - 110px)*16/9));aspect-ratio:16/9;background:#000;margin-top:6px}
 #stage video,#stage canvas{position:absolute;inset:0;width:100%;height:100%}
 #video{object-fit:fill}
-
-/* عدسة/مؤشر رصد بزوايا الإطار */
-.br{position:absolute;width:22px;height:22px;border:2px solid #ffffff55;pointer-events:none;z-index:2}
-.br.tl{top:10px;inset-inline-start:10px;border-inline-end:none;border-bottom:none;border-start-start-radius:8px}
-.br.tr{top:10px;inset-inline-end:10px;border-inline-start:none;border-bottom:none;border-start-end-radius:8px}
-.br.bl{bottom:10px;inset-inline-start:10px;border-inline-end:none;border-top:none;border-end-start-radius:8px}
-.br.br2{bottom:10px;inset-inline-end:10px;border-inline-start:none;border-top:none;border-end-end-radius:8px}
-
-#hud{position:absolute;top:10px;inset-inline-start:10px;z-index:3;display:flex;flex-direction:column;gap:6px;max-width:72%}
-#pill{display:flex;align-items:center;gap:8px;background:#0b0f14cc;backdrop-filter:blur(6px);border:1px solid #ffffff1a;border-radius:999px;padding:7px 14px 7px 10px;width:fit-content}
-#dot{width:9px;height:9px;border-radius:50%;background:var(--info);flex:none;box-shadow:0 0 0 3px #3aa0ff22}
-#pill.alert{background:#4a0f0dcc;border-color:#ff443855;animation:pulse 1s ease-in-out infinite}
-#pill.alert #dot{background:var(--warn);box-shadow:0 0 0 3px #ff443833}
-#statusTxt{font-weight:700;font-size:clamp(14px,2.6vw,21px)}
-@keyframes pulse{0%,100%{box-shadow:0 0 0 0 #ff443833}50%{box-shadow:0 0 0 7px #ff443800}}
-#chips{display:flex;flex-wrap:wrap;gap:6px}
-.chip{display:flex;align-items:center;gap:5px;background:#0b0f14b3;backdrop-filter:blur(6px);border:1px solid #ffffff1a;border-radius:999px;padding:4px 10px;font-size:clamp(11px,1.9vw,14px);color:var(--fg)}
-.chip::before{content:'';width:6px;height:6px;border-radius:50%}
-.chip-car::before{background:var(--info)}
-.chip-em::before{background:var(--accent)}
-.chip-y::before{background:#eab308}
-
-#bev{inset:auto !important;bottom:10px;inset-inline-end:10px;width:76px !important;height:95px !important;image-rendering:pixelated;border:1px solid #ffffff2a;border-radius:8px;background:#000;z-index:2;box-shadow:0 6px 16px -6px #000c}
-
-#sign{position:absolute;top:10px;inset-inline-end:10px;z-index:3;width:clamp(50px,9vw,80px);aspect-ratio:1;border-radius:50%;background:radial-gradient(circle at 35% 30%,#fff,#f4f4f4);box-shadow:inset 0 0 0 clamp(4px,.8vw,7px) #d61f1f,0 6px 16px -4px #000a;color:#111;font-weight:800;font-size:clamp(18px,4vw,34px);font-variant-numeric:tabular-nums;display:none;align-items:center;justify-content:center}
-
-#msg{color:var(--mut);font-size:13px;text-align:center;padding:0 12px;min-height:18px}
-
-#fix{position:absolute;top:60px;inset-inline-start:10px;z-index:3;display:none;align-items:center;gap:6px;background:var(--accent);color:var(--accent-ink);border:none;border-radius:999px;padding:7px 14px;font-weight:700;font-size:13px;box-shadow:0 6px 14px -4px #000a}
-
-#console{display:flex;align-items:stretch;gap:8px;padding:0 4px 4px;width:min(100vw,calc((100vh - 128px)*16/9));max-width:100%}
-#console .seg{display:flex;align-items:stretch;background:var(--panel);border:1px solid var(--border);border-radius:12px;overflow:hidden}
-button{all:unset;cursor:pointer;color:var(--fg);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;padding:9px 13px;font-size:11.5px;line-height:1.3;white-space:nowrap}
-#console .seg button+button{border-inline-start:1px solid var(--border)}
-#console .seg button:active{background:var(--panel2)}
-.ic{font-size:17px;line-height:1}
-button.main{background:var(--accent);color:var(--accent-ink);border-radius:12px;border:1px solid var(--accent);font-weight:700;font-size:14px;padding:10px 18px}
-button.main .ic{font-size:15px}
-#back{background:var(--panel);border:1px solid var(--border);border-radius:12px}
-
-#log{display:none;position:fixed;left:0;right:0;bottom:0;z-index:20;max-height:46vh;overflow:auto;background:var(--panel);border-top:1px solid var(--border);border-radius:16px 16px 0 0;box-shadow:0 -14px 30px -14px #000a;padding:6px 14px 14px;font-size:14px}
-#logh{position:sticky;top:0;background:var(--panel);display:flex;align-items:center;justify-content:space-between;padding:10px 2px 8px;font-weight:700}
-#logh button{all:unset;color:var(--mut);font-size:13px;padding:4px 8px}
-#log .row{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:9px 2px;border-top:1px solid var(--border)}
-#log .e{color:var(--fg)}
-#log .t{color:var(--mut);font-size:12.5px}
-#log .empty{color:var(--mut);text-align:center;padding:18px 4px}
+#status{position:absolute;top:8px;inset-inline-start:8px;font-weight:700;font-size:clamp(15px,3vw,26px);padding:4px 12px;border-radius:10px;background:rgba(0,0,0,.6)}
+#status.alert{background:var(--warn)}
+#bev{inset:auto !important;bottom:8px;inset-inline-end:8px;width:126px !important;height:105px !important;image-rendering:pixelated;border:1px solid #fff5;background:#000}
+#info{position:absolute;bottom:8px;inset-inline-start:8px;max-width:62%;font-size:clamp(12px,2.2vw,18px);padding:4px 10px;border-radius:10px;background:rgba(0,0,0,.6);line-height:1.5}
+.btn{display:inline-block;background:var(--btn);border:1px solid #333b45;border-radius:10px;padding:10px 16px;font-size:15px;cursor:pointer}
+#msg{color:var(--mut);font-size:14px;text-align:center;padding:0 12px;min-height:20px}
+#bar{display:flex;gap:8px;flex-wrap:wrap;justify-content:center;padding-bottom:8px}
+button{background:var(--btn);color:var(--fg);border:1px solid #333b45;border-radius:10px;padding:10px 16px;font-size:15px}
+#log{display:none;width:min(560px,94vw);max-height:30vh;overflow:auto;background:#12161b;border:1px solid #2a313a;border-radius:10px;padding:8px 12px;font-size:14px}
+#log div{padding:3px 0;border-bottom:1px solid #222a33}
+button.main{background:#2563eb;border-color:#2563eb}
 </style>
 </head>
 <body>
 <div id="stage">
   <video id="video" playsinline muted></video>
   <canvas id="ov" width="960" height="540"></canvas>
-  <span class="br tl"></span><span class="br tr"></span><span class="br bl"></span><span class="br br2"></span>
-  <div id="hud">
-    <div id="pill"><span id="dot"></span><span id="statusTxt">اضغط ابدأ</span></div>
-    <div id="chips"></div>
-  </div>
-  <button id="fix"><span class="ic">✓</span>ما فيه انحراف، صحّح</button>
-  <div id="sign"></div>
-  <canvas id="bev" width="120" height="150"></canvas>
+  <div id="status">اضغط ابدأ</div>
+  <canvas id="bev" width="180" height="150"></canvas>
+  <div id="info"></div>
 </div>
 <div id="msg">ضع الجوال أفقياً على الزجاج الأمامي.</div>
 <div id="log"></div>
-<div id="console">
-  <button id="start" class="main"><span class="ic">▶</span>ابدأ الكاميرا</button>
-  <div class="seg">
-    <button id="cal"><span class="ic">⟲</span>معايرة</button>
-    <button id="logb"><span class="ic">🗒</span>السجل</button>
-    <button id="dbg"><span class="ic">◱</span>المنظور</button>
-    <button id="learnrst"><span class="ic">↺</span>تصفير التعلّم</button>
-    <button id="up"><span class="ic">⇪</span>فحص فيديو</button>
-  </div>
-  <input id="file" type="file" accept="video/*" hidden>
-  <button id="back" style="display:none"><span class="ic">↩</span>رجوع للكاميرا</button>
+<div id="bar">
+  <button id="start" class="main">ابدأ الكاميرا</button>
+  <button id="cal">إعادة المعايرة</button>
+  <label class="btn" for="file">فحص فيديو</label><input id="file" type="file" accept="video/*" hidden>
+  <button id="pp" style="display:none">إيقاف/تشغيل</button>
+  <button id="logb">سجل التنبيهات</button>
+  <button id="dbg">نافذة المنظور</button>
 </div>
 <script>
-const C={PW:480,PH:270,BW:120,BH:150,P:91,MINL:110,SM:.3,MISS:45,HOLD:30,CAR:250,WARN:.25,WARNF:20,CALF:60};
-const {PW,PH,BW,BH}=C, OW=960, OH=540, K=OW/PW;
+const C={PW:480,PH:270,BW:180,BH:150,P:91,MINL:110,SM:.2,MISS:45,HOLD:30,CAR:350,WARN:.25,WARNF:20,CALF:60};
+const {PW,PH,BW,BH}=C, OW=960, OH=540, K=OW/PW, VEH=new Set(['car','truck','bus','motorcycle']);
 const $=id=>document.getElementById(id);
 const video=$('video'),ov=$('ov'),octx=ov.getContext('2d');
 const pc=document.createElement('canvas');pc.width=PW;pc.height=PH;
 const pctx=pc.getContext('2d',{willReadFrequently:true});
 const bevC=$('bev'),bctx=bevC.getContext('2d');
+const loadScript=u=>new Promise((ok,no)=>{const s=document.createElement('script');s.src=u;s.onload=ok;s.onerror=no;document.head.appendChild(s)});
 
 // ---------- رياضيات ----------
 function solve(A){const n=A.length;
@@ -132,24 +82,63 @@ const xat=(c,y)=>c[0]*y*y+c[1]*y+c[2];
 const blend=(o,n)=>o?o.map((v,i)=>v*(1-C.SM)+n[i]*C.SM):n;
 
 // ---------- حالة ----------
-let pts=[],Hi=null,yF=0,yN=0,running=false,showBev=false;
+let src='cam',calKey='pts-cam',pts=[],Hi=null,Hf=null,yF=0,yN=0,running=false,showBev=false;
 const gray=new Uint8Array(PW*PH),mask=new Uint8Array(PW*PH);
 const bev=new Uint8Array(BW*BH),acc=new Float32Array(BW*BH),bin=new Uint8Array(BW*BH);
-let L=null,R=null,missL=0,missR=0,rejL=0,rejR=0,laneW=BW*.5,calib=[],base=null,bad=0,
-    lastOff=null,lastBoth=-999,flash=0,cl=0,cr=0,fn=0,lastBeep=0,actx=null;
-let lost=0,ci=0,DK=.65,THR=100,sens=parseFloat(localStorage.getItem('lanesens')||'1'),fixT=0,wasAlert=false,alertAt=0,autoN=0,flashT='تغيير مسار',emL=null,emR=null,yL=false,yR=false,testMode=false,sgnBusy=false,sgnN=0,sgnLast=0,sgnVal=null,sgnSeen=0,sgnCand=null,worker=null;
+const S=[0,1].map(()=>({c:null,miss:0,rej:0,y:0,cov:1,car:0,seen:false}));
+let laneW=BW/3,calib=[],base=null,bad=0,lastOff=null,lastBoth=-999,flash=0,fn=0,lastBeep=0,actx=null,wasLost=false;
+let model=null,modelP=null,dets=[],detBusy=false,limit=null,limitT=0,ocrBusy=false,tess=null,reads=[],spd=null,gpsId=null;
 
-function setCalib(p){pts=p;
-  yF=Math.min(p[0][1],p[1][1])|0;yN=Math.max(p[2][1],p[3][1])|0;
-  Hi=homography([[BW*.25,0],[BW*.75,0],[BW*.75,BH],[BW*.25,BH]],p);
-  L=R=null;base=null;calib=[];bad=0;}
-function resetCalib(){pts=[];Hi=null;autoN=0;if(!testMode)localStorage.removeItem('lanepts');
-  $('msg').textContent='اضغط على الشاشة 4 نقاط على خطي مسارك: 1 بعيد-يسار، 2 بعيد-يمين، 3 قريب-يمين، 4 قريب-يسار (فوق الكبوت).'}
+function resetState(){S.forEach(s=>Object.assign(s,{c:null,miss:0,rej:0,y:0,cov:1,car:0,seen:false}));
+  acc.fill(0);calib=[];base=null;bad=0;lastOff=null;wasLost=false;laneW=BW/3}
+function setCalib(p){pts=p;yF=Math.min(p[0][1],p[1][1])|0;yN=Math.max(p[2][1],p[3][1])|0;
+  const d=[[BW/3,0],[BW*2/3,0],[BW*2/3,BH],[BW/3,BH]];Hi=homography(d,p);Hf=homography(p,d);resetState()}
+function resetCalib(){pts=[];Hi=null;localStorage.removeItem(calKey);resetState();
+  $('msg').textContent='اضغط 4 نقاط على خطي مسارك: 1 بعيد-يسار، 2 بعيد-يمين، 3 قريب-يمين، 4 قريب-يسار (فوق الكبوت).'}
 ov.addEventListener('pointerdown',e=>{if(Hi||!running)return;
   const r=ov.getBoundingClientRect();pts.push([(e.clientX-r.left)/r.width*PW,(e.clientY-r.top)/r.height*PH]);
   if(pts.length==4){if(pts[0][1]<pts[3][1]&&pts[1][1]<pts[2][1]){
-      if(!testMode)localStorage.setItem('lanepts',JSON.stringify(pts));setCalib(pts);$('msg').textContent='تمت المعايرة.'}
+      localStorage.setItem(calKey,JSON.stringify(pts));setCalib(pts);$('msg').textContent='تمت المعايرة.';if(src=='file')video.play()}
     else{pts=[];$('msg').textContent='الترتيب غلط: النقاط البعيدة لازم تكون أعلى. أعد المحاولة.'}}});
+
+// ---------- كاشف السيارات (COCO-SSD) ----------
+function initModel(){if(modelP)return;modelP=(async()=>{try{
+  await loadScript('https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.22.0/dist/tf.min.js');
+  await loadScript('https://cdn.jsdelivr.net/npm/@tensorflow-models/coco-ssd@2.2.3/dist/coco-ssd.min.js');
+  model=await cocoSsd.load({base:'lite_mobilenet_v2'})}catch(e){$('msg').textContent='تعذر تحميل كاشف السيارات (يحتاج نت أول مرة).'}})()}
+function runDet(){if(!model||detBusy)return;detBusy=true;
+  model.detect(pc,12,.45).then(r=>{dets=r}).catch(()=>{}).finally(()=>detBusy=false)}
+
+// ---------- لوحات السرعة ----------
+const cropC=document.createElement('canvas');cropC.width=cropC.height=96;
+const cx=cropC.getContext('2d',{willReadFrequently:true});
+function findSign(d){ // دائرة حمراء بوسط فاتح في الجزء العلوي-الأيمن
+  const cs=8,gw=Math.ceil(PW/cs),gh=Math.floor(PH*.62/cs),g=new Uint8Array(gw*gh),isR=(i)=>d[i]>120&&d[i]>d[i+1]*2.2&&d[i]>d[i+2]*2.2;
+  for(let y=0;y<gh*cs;y+=2)for(let x=PW*.3|0;x<PW;x+=2)if(isR((y*PW+x)*4))g[(y/cs|0)*gw+(x/cs|0)]++;
+  const seen=new Uint8Array(g.length);
+  for(let s0=0;s0<g.length;s0++){if(seen[s0]||g[s0]<3)continue;
+    const q=[s0];seen[s0]=1;let x0=1e9,y0=1e9,x1=-1,y1=-1;
+    while(q.length){const c=q.pop(),cxx=c%gw,cyy=(c/gw)|0;x0=Math.min(x0,cxx);x1=Math.max(x1,cxx);y0=Math.min(y0,cyy);y1=Math.max(y1,cyy);
+      for(const[dx,dy]of[[1,0],[-1,0],[0,1],[0,-1]]){const nx=cxx+dx,ny=cyy+dy;
+        if(nx>=0&&ny>=0&&nx<gw&&ny<gh&&!seen[ny*gw+nx]&&g[ny*gw+nx]>=3){seen[ny*gw+nx]=1;q.push(ny*gw+nx)}}}
+    const bx=x0*cs,by=y0*cs,bw=(x1-x0+1)*cs,bh=(y1-y0+1)*cs;
+    if(bw<14||bw>120||bw/bh<.8||bw/bh>1.25)continue;
+    let red=0,wh=0,n=0;for(let y=by+bh*.3|0;y<by+bh*.7;y+=2)for(let x=bx+bw*.3|0;x<bx+bw*.7;x+=2){const i=(y*PW+x)*4;n++;
+      if(isR(i))red++;else if(d[i]>150&&d[i+1]>150&&d[i+2]>150)wh++}
+    if(n&&red/n<.2&&wh/n>.35)return{x:bx,y:by,w:bw,h:bh}}
+  return null}
+async function ocr(b){if(ocrBusy||video.videoWidth==0)return;ocrBusy=true;
+  try{if(!window.Tesseract)await loadScript('https://cdn.jsdelivr.net/npm/tesseract.js@5.1.1/dist/tesseract.min.js');
+    if(!tess){tess=await Tesseract.createWorker('eng');await tess.setParameters({tessedit_char_whitelist:'0123456789',tessedit_pageseg_mode:'7'})}
+    const sx=video.videoWidth/PW,sy=video.videoHeight/PH;
+    cx.drawImage(video,(b.x+b.w*.18)*sx,(b.y+b.h*.18)*sy,b.w*.64*sx,b.h*.64*sy,0,0,96,96);
+    const im=cx.getImageData(0,0,96,96);for(let i=0;i<im.data.length;i+=4){const v=(im.data[i]+im.data[i+1]+im.data[i+2])/3<105?0:255;im.data[i]=im.data[i+1]=im.data[i+2]=v}
+    cx.putImageData(im,0,0);
+    const{data}=await tess.recognize(cropC),v=parseInt(data.text.replace(/\D/g,''));
+    const t=performance.now();
+    if(v>=20&&v<=140&&v%10==0){reads.push([v,t]);reads=reads.filter(r=>t-r[1]<4000);
+      if(reads.filter(r=>r[0]==v).length>=2){limit=v;limitT=t}}
+  }catch(e){}ocrBusy=false}
 
 // ---------- المعالجة ----------
 function makeMask(d,relax){
@@ -160,195 +149,158 @@ function makeMask(d,relax){
   thr=Math.max(C.MINL-15*relax,thr);const dd=22-4*relax;
   for(let y=yF;y<yN;y++){const k=2+Math.round(5*(y-yF)/Math.max(1,yN-yF));
     for(let x=k;x<PW-k;x++){const o=y*PW+x,v=gray[o],i=o*4;
-      const thin=v>(gray[o-k]+gray[o+k])/2+dd;
-      if(thin&&(v>=thr||(d[i]>140-10*relax&&d[i+1]>110-10*relax&&d[i+2]<(d[i]+d[i+1])*.28)))mask[o]=1}}}
-function makeBev(){let carL=0,carR=0,carC=0;
+      if(v>(gray[o-k]+gray[o+k])/2+dd){const yel=d[i]>140&&d[i+1]>110&&d[i+2]<(d[i]+d[i+1])*.28;
+        if(v>=thr||yel)mask[o]=yel?2:1}}}
+  for(const b of dets){if(!VEH.has(b.class))continue;const[x,y,w,h]=b.bbox;   // السيارات ما تدخل في الكشف
+    for(let yy=Math.max(yF,y|0);yy<Math.min(yN,(y+h)|0);yy++)for(let xx=Math.max(0,(x-3)|0);xx<Math.min(PW,(x+w+3)|0);xx++)mask[yy*PW+xx]=0}}
+function makeBev(){let cL=0,cR=0;
   for(let by=0;by<BH;by++){for(let bx=0;bx<BW;bx++){const[x,y]=apply(Hi,bx,by),xi=x|0,yi=y|0;
       bev[by*BW+bx]=(xi>=0&&xi<PW&&yi>=yF&&yi<yN)?mask[yi*PW+xi]:0}
     const o=by*BW;let bx=0;
     while(bx<BW){if(!bev[o+bx]){bx++;continue}const s=bx;while(bx<BW&&bev[o+bx])bx++;
-      if(bx-s>BW*(by<BH*.4?.3:.14)){for(let k=s;k<bx;k++)bev[o+k]=0;const c=(s+bx)/2,a=L?xat(L,by):null,b=R?xat(R,by):null;
-        if(a!=null&&b!=null&&c>a&&c<b)carC+=bx-s;else (c<BW/2)?carL+=bx-s:carR+=bx-s}}}
-  for(let i=0;i<bev.length;i++){acc[i]=DK*acc[i]+(1-DK)*bev[i]*255;bin[i]=acc[i]>THR?1:0}
-  return[carL,carR,carC]}
-function findLine(xs0,xe,prevX){
+      if(bx-s>BW*.12){for(let k=s;k<bx;k++)bev[o+k]=0;((s+bx)/2<BW/2)?cL+=bx-s:cR+=bx-s}}}
+  for(let i=0;i<bev.length;i++){acc[i]=.65*acc[i]+.35*(bev[i]?255:0);bin[i]=acc[i]>100?1:0}
+  return[cL,cR]}
+function findLine(xs0,xe,prevX,relax){
   const hist=new Float32Array(xe-xs0);let tot=0;
-  for(let y=BH>>1;y<BH;y++)for(let x=xs0;x<xe;x++)if(bin[y*BW+x]){hist[x-xs0]++;tot++}
-  if(tot<6)return null;
+  for(let y=0;y<BH;y++)for(let x=xs0;x<xe;x++)if(bin[y*BW+x]){hist[x-xs0]++;tot++}
+  if(tot<10)return null;
   const h2=new Float32Array(hist.length);
   for(let i=0;i<hist.length;i++){for(let j=-2;j<=2;j++)h2[i]+=hist[i+j]||0;
     if(prevX!=null&&prevX>=xs0&&prevX<xe)h2[i]*=Math.exp(-((i+xs0-prevX)**2)/200)}
   let cur=xs0,best=-1;for(let i=0;i<h2.length;i++)if(h2[i]>best){best=h2[i];cur=xs0+i}
-  const nw=12,wh=BH/nw,px=[],py=[];let hits=0,v=0;
+  const nw=10,wh=BH/nw,nmin=relax>=2?2:4,px=[],py=[];let hits=0,yc=0,tc=0;
   for(let i=0;i<nw;i++){const yh=BH-i*wh,yl=yh-wh;let sx=0,n=0;const tx=[],ty=[];
-    const cx=Math.max(0,Math.min(BW-1,cur+Math.round(v)));
-    for(let y=Math.floor(yl);y<yh;y++)for(let x=Math.max(0,cx-12);x<Math.min(BW,cx+12);x++)
-      if(bin[y*BW+x]){tx.push(x);ty.push(y);sx+=x;n++}
-    if(n>4){const nc=Math.round(sx/n);v=.5*v+.5*(nc-cur);cur=nc;px.push(...tx);py.push(...ty);hits++}
-    else{cur=cx;v*=.8}}
-  if(hits<3||px.length<25)return null;
+    for(let y=Math.floor(yl);y<yh;y++)for(let x=Math.max(0,cur-8);x<Math.min(BW,cur+8);x++)
+      if(bin[y*BW+x]){tx.push(x);ty.push(y);sx+=x;n++;const v=bev[y*BW+x];if(v){tc++;if(v==2)yc++}}
+    if(n>=nmin){cur=Math.round(sx/n);px.push(...tx);py.push(...ty);hits++}}
+  if(hits<3||px.length<15)return null;
   const deg=hits>=5?2:1;let c=polyfit(py,px,deg);
   for(let t=0;t<2;t++){const ky=[],kx=[];
-    for(let i=0;i<px.length;i++)if(Math.abs(xat(c,py[i])-px[i])<3){ky.push(py[i]);kx.push(px[i])}
-    if(kx.length<20)break;c=polyfit(ky,kx,deg)}
-  if(Math.abs(c[0])>3e-3||Math.abs(c[1])>1||Math.abs(2*c[0]*BH+c[1])>1)return null;
-  return c}
+    for(let i=0;i<px.length;i++)if(Math.abs(xat(c,py[i])-px[i])<3.5){ky.push(py[i]);kx.push(px[i])}
+    if(kx.length<12)break;c=polyfit(ky,kx,deg)}
+  if(Math.abs(c[0])>3e-3||Math.abs(c[1])>.9||Math.abs(2*c[0]*BH+c[1])>.9)return null;
+  return{c,cov:hits/nw,y:tc>5?yc/tc:0}}
 function accept(prev,nw,rej){
   if(!nw||!prev||rej>=8)return nw;
   const d=Math.max(Math.abs(xat(nw,BH*.3)-xat(prev,BH*.3)),Math.abs(xat(nw,BH)-xat(prev,BH)));
-  return d<.12*BW?nw:null}
-
+  return d<.06*BW?nw:null}
 function beep(){const t=performance.now();if(!actx||t-lastBeep<2000)return;lastBeep=t;
   const o=actx.createOscillator(),g=actx.createGain();o.frequency.value=1200;g.gain.value=.4;
   o.connect(g);g.connect(actx.destination);o.start();o.stop(actx.currentTime+.25)}
 function logEvt(type){const a=JSON.parse(localStorage.getItem('lanelog')||'[]');
   a.unshift({t:new Date().toLocaleString('ar-SA'),type});localStorage.setItem('lanelog',JSON.stringify(a.slice(0,200)))}
 function showLog(){const a=JSON.parse(localStorage.getItem('lanelog')||'[]'),b=$('log');
-  const head='<div id="logh"><span>سجل التنبيهات</span><button id="logx">إغلاق</button></div>';
-  b.innerHTML=head+(a.length?a.map(e=>`<div class="row"><span class="e">${e.type}</span><span class="t tnum">${e.t}</span></div>`).join(''):'<div class="empty">لا توجد تنبيهات بعد.</div>');
-  $('logx').onclick=()=>{b.style.display='none'}}
-function setStatus(t,a,chips){
-  $('statusTxt').textContent=t;$('pill').classList.toggle('alert',!!a);
-  $('chips').innerHTML=(chips||[]).map(([k,l])=>`<span class="chip chip-${k}">${l}</span>`).join('')}
+  b.innerHTML=a.length?a.map(e=>`<div>${e.t} — ${e.type}</div>`).join(''):'لا توجد تنبيهات بعد.'}
+function setStatus(t,a){const s=$('status');s.textContent=t;s.classList.toggle('alert',!!a)}
 
-const isY=(c,d)=>{let n=0,k=0;for(let y=BH*.3;y<BH;y+=6){const[a,b]=apply(Hi,xat(c,y),y),i=((b|0)*PW+(a|0))*4;
-    if(a>=0&&a<PW&&b>=yF&&b<yN){k++;if(d[i]>130&&d[i+1]>100&&d[i+2]<(d[i]+d[i+1])*.3)n++}}return k>4&&n/k>.5};
-// ---------- لوحات السرعة: كشف الدائرة الحمراء ثم قراءة الرقم ----------
-function findSign(d){const cw=4,W=PW/cw|0,H=(PH*.6/cw)|0,cell=new Uint8Array(W*H);
-  for(let cy=0;cy<H;cy++)for(let cx=0;cx<W;cx++){let n=0;
-    for(let y=0;y<cw;y++)for(let x=0;x<cw;x++){const i=((cy*cw+y)*PW+cx*cw+x)*4,r=d[i];if(r>140&&d[i+1]<85&&d[i+2]<85&&r>d[i+1]*2)n++}
-    cell[cy*W+cx]=n>3?1:0}
-  let best=null;const seen=new Uint8Array(W*H);
-  for(let s0=0;s0<W*H;s0++){if(!cell[s0]||seen[s0])continue;const q=[s0];seen[s0]=1;let x0=W,x1=0,y0=H,y1=0,n=0;
-    while(q.length){const p=q.pop(),x=p%W,y=(p/W)|0;n++;x0=Math.min(x0,x);x1=Math.max(x1,x);y0=Math.min(y0,y);y1=Math.max(y1,y);
-      for(const[dx,dy]of[[1,0],[-1,0],[0,1],[0,-1]]){const nx=x+dx,ny=y+dy;if(nx>=0&&nx<W&&ny>=0&&ny<H){const o=ny*W+nx;if(cell[o]&&!seen[o]){seen[o]=1;q.push(o)}}}}
-    const w=x1-x0+1,h=y1-y0+1,fill=n/(w*h);
-    if(w>=3&&w<=22&&h>=3&&h<=22&&w/h>.75&&w/h<1.33&&fill>.25&&fill<.85&&(!best||n>best.n))best={n,x:x0*cw,y:y0*cw,w:w*cw,h:h*cw}}
-  return best}
-function loadTess(){return window.Tesseract?Promise.resolve():new Promise((ok,no)=>{const t=document.createElement('script');
-  t.src='https://cdn.jsdelivr.net/npm/tesseract.js@5.1.1/dist/tesseract.min.js';t.onload=ok;t.onerror=no;document.head.appendChild(t)})}
-async function readSign(b){sgnBusy=true;try{
-  if(!worker){await loadTess();worker=await Tesseract.createWorker('eng');
-    await worker.setParameters({tessedit_char_whitelist:'0123456789',tessedit_pageseg_mode:'7'})}
-  const sx=video.videoWidth/PW,sy=video.videoHeight/PH,m=.2,cw=Math.round(b.w*(1-2*m)*sx),ch=Math.round(b.h*(1-2*m)*sy),S=3;
-  const c=document.createElement('canvas');c.width=cw*S+40;c.height=ch*S+40;const x=c.getContext('2d');
-  x.fillStyle='#fff';x.fillRect(0,0,c.width,c.height);
-  x.drawImage(video,(b.x+b.w*m)*sx,(b.y+b.h*m)*sy,cw,ch,20,20,cw*S,ch*S);
-  const{data}=await worker.recognize(c),v=parseInt(data.text.replace(/\D/g,''));
-  if(v>=20&&v<=140&&v%10==0){if(v==sgnCand){sgnVal=v;sgnSeen=performance.now()}sgnCand=v}else sgnCand=null
-}catch(e){}sgnBusy=false}
-
+let emerg=false,vw='',info='';
 function step(){
-  fn++;const d=pctx.getImageData(0,0,PW,PH).data;
-  const relax=Math.min(3,Math.max(missL,missR)>>3);
-  DK=.65+.06*relax;THR=100-15*relax;
-  makeMask(d,relax);const[carLpx,carRpx,carCpx]=makeBev();
-  ci=carCpx>C.CAR?ci+1:0;
-  cl=carLpx>C.CAR?cl+1:0;cr=carRpx>C.CAR?cr+1:0;
-  const carL=cl>0&&cl<=90,carR=cr>0&&cr<=90,carI=ci>0&&ci<=90,mid=BW/2;
-  let rawL=carL?null:findLine(0,mid,L?xat(L,BH):null);
-  let rawR=carR?null:findLine(mid,BW,R?xat(R,BH):null);
-  const nL=accept(L,rawL,rejL),nR=accept(R,rawR,rejR);
-  rejL=(rawL&&!nL)?rejL+1:0;rejR=(rawR&&!nR)?rejR+1:0;
-  if(nL){L=blend(L,nL);missL=0}else if(!carL&&!carI){if(++missL>C.MISS)L=null}
-  if(nR){R=blend(R,nR);missR=0}else if(!carR&&!carI){if(++missR>C.MISS)R=null}
-  if(!L&&!R){if(!lost){acc.fill(0);base=null;calib=[];bad=0;lastOff=null;laneW=BW*.5;missL=missR=0;rejL=rejR=0}
-    lost++;setStatus('المسارات اختفت… أعيد البحث',false);draw(false,0,0);return}
-  lost=0;
-  const sL=!!nL,sR=!!nR;
-  let xl=L?xat(L,BH):null,xr=R?xat(R,BH):null;
-  if(sL&&sR){const w=xr-xl;if(w>BW*.3&&w<BW*.75)laneW=Math.min(BW*.7,Math.max(BW*.32,.9*laneW+.1*w))}
+  fn++;const d=pctx.getImageData(0,0,PW,PH).data;runDet();
+  const relax=wasLost?3:Math.min(3,Math.max(S[0].miss,S[1].miss)>>3);
+  makeMask(d,relax);const[cLp,cRp]=makeBev();
+  const cars=[cLp>C.CAR,cRp>C.CAR],mid=BW/2;
+  for(const i of[0,1]){const s=S[i];s.car=cars[i]?s.car+1:0;const frz=s.car>0&&s.car<=90;
+    const r=frz?null:findLine(i?mid:0,i?BW:mid,s.c?xat(s.c,BH):null,relax);
+    const n=accept(s.c,r&&r.c,s.rej);s.rej=(r&&!n)?s.rej+1:0;
+    if(n){s.c=blend(s.c,n);s.miss=0;s.cov=.8*s.cov+.2*r.cov;s.y=.8*s.y+.2*r.y;s.seen=true}
+    else{s.seen=false;if(!frz&&++s.miss>C.MISS)s.c=null}s.frz=frz}
+  const A=S[0],B=S[1];
+  // فقدان كلي: نوقف ونبدأ من جديد
+  const lost=!(A.c||B.c)||Math.min(A.miss,B.miss)>C.HOLD;
+  if(lost){if(!wasLost){acc.fill(0);base=null;calib=[];bad=0;lastOff=null}S.forEach(s=>{s.c=null;s.rej=0});wasLost=true}
+  else wasLost=false;
+  if(A.seen&&B.seen){const w=B.c?xat(B.c,BH)-xat(A.c,BH):0;if(w>BW*.2&&w<BW*.5)laneW=.95*laneW+.05*w}
+  let xl=A.c?xat(A.c,BH):null,xr=B.c?xat(B.c,BH):null;
   if(xl!=null&&xr==null)xr=xl+laneW;if(xr!=null&&xl==null)xl=xr-laneW;
-  let text='لا توجد خطوط',alert=false,off=null;const both=sL&&sR;
-  if(xl!=null&&xr!=null&&Math.min(missL,missR)<=C.HOLD){
-    off=((xl+xr)/2-BW/2)/(xr-xl);
-    if(both){if(lastOff!=null&&fn-lastBoth<=10&&Math.abs(off-lastOff)>.5){flash=45;bad=0;flashT=off<lastOff?'تغيير مسار لليسار':'تغيير مسار لليمين';logEvt(flashT)}
+  let text=lost?'فقدت الخطوط — أعيد البحث':'',alert=false,off=null;
+  if(!lost&&xl!=null){off=((xl+xr)/2-BW/2)/(xr-xl);const both=A.seen&&B.seen;
+    if(both){if(lastOff!=null&&fn-lastBoth<=10&&Math.abs(off-lastOff)>.5){flash=45;bad=0;logEvt('تغيير مسار')}
       lastOff=off;lastBoth=fn}
-    text=both?'تمام':(sL||sR)?'خط واحد':'من الذاكرة'}
-  if(both&&off!=null){
+    text=both?'تمام':(A.seen||B.seen)?'خط واحد':'من الذاكرة'}
+  if(off!=null){
     if(base==null){calib.push(off);text=`يتعلم وضعك ${calib.length}/${C.CALF}`;
       if(calib.length>=C.CALF)base=calib.slice().sort((a,b)=>a-b)[calib.length>>1]}
-    else{bad=Math.abs(off-base)>C.WARN*sens?bad+1:0;
-      const need=Math.round(C.WARNF*sens);
-      if(bad>=need){text='انحراف عن المسار!';alert=true;fixT=performance.now();if(bad==need){beep();logEvt('انحراف عن المسار')}}}}
-  else if(!both)bad=Math.max(0,bad-2);
-  const now=performance.now();
-  if(alert&&!wasAlert)alertAt=now;
-  if(!alert&&wasAlert&&now-alertAt<1500&&base!=null&&off!=null&&Math.abs(off-base)<C.WARN*sens*.6&&autoN<3){
-    sens=Math.min(2.2,sens+.05);localStorage.setItem('lanesens',sens.toFixed(2));autoN++;
-    logEvt('تصحيح تلقائي (حساسية الآن x'+sens.toFixed(2)+')')}
-  wasAlert=alert;
-  if(flash>0&&!alert){flash--;if(off!=null)text=flashT}
-  $('fix').style.display=(alert&&now-fixT<8000)?'block':'none';
-  if(fn%6==0){emL=emR=null;const gap=Math.max(14,.22*laneW),gap2=Math.min(BW,.8*laneW);
-    if(both&&R&&!carR&&!carI){const a=Math.round(xat(R,BH)+gap),b=Math.min(BW,Math.round(xat(R,BH)+gap2));if(b-a>10)emR=findLine(a,b,null)}
-    if(both&&L&&!carL&&!carI){const b=Math.round(xat(L,BH)-gap),a=Math.max(0,Math.round(xat(L,BH)-gap2));if(b-a>10)emL=findLine(a,b,null)}
-    yL=!!L&&isY(L,d);yR=!!R&&isY(R,d)}
-  if(fn%4==0){const b=findSign(d);if(b){sgnN++;if(sgnN>=2&&!sgnBusy&&performance.now()-sgnLast>700){sgnLast=performance.now();readSign(b)}}else sgnN=0}
-  const sg=$('sign'),sOn=sgnVal&&performance.now()-sgnSeen<10000;sg.style.display=sOn?'flex':'none';if(sOn)sg.textContent=sgnVal;
-  const chips=[];
-  if(carI)chips.push(['car','مركبة أمامك']);else if(carL||carR)chips.push(['car','مركبة بجانبك']);
-  if(emL)chips.push(['em','طوارئ يسار']);if(emR)chips.push(['em','طوارئ يمين']);
-  if(yL)chips.push(['y','خط أصفر يسار']);if(yR)chips.push(['y','خط أصفر يمين']);
-  setStatus(text,alert,chips);
-  draw(alert,carL,carR);
+    else{bad=Math.abs(off-base)>C.WARN?bad+1:0;
+      if(bad>=C.WARNF){text='انحراف عن المسار!';alert=true;if(bad==C.WARNF){beep();logEvt('انحراف عن المسار')}}}}
+  else bad=0;
+  if(flash>0&&!alert){flash--;if(off!=null)text='تغيير مسار'}
+  // سيارة داخل مساري؟
+  vw='';dets.forEach(v=>v.inLane=false);
+  if(!lost&&xl!=null)for(const v of dets){if(!VEH.has(v.class))continue;
+    const[x,y,w,h]=v.bbox,[bx,by]=apply(Hf,x+w/2,y+h);if(by<-20||by>BH+80)continue;
+    const yy=Math.min(Math.max(by,0),BH),lx=A.c?xat(A.c,yy):xat(B.c,yy)-laneW,rx=B.c?xat(B.c,yy):lx+laneW;
+    if(bx>lx+laneW*.1&&bx<rx-laneW*.1){v.inLane=true;const close=w>PW*.3||by>BH*.85;
+      if(close){vw='🚗 سيارة قريبة جداً!';beep()}else if(!vw)vw='🚗 سيارة أمامك'}}
+  // لوحات + سرعة
+  const t=performance.now();if(limit&&t-limitT>120000)limit=null;
+  if(fn%6==0&&!ocrBusy){const b=findSign(d);if(b)ocr(b)}
+  const over=limit&&spd!=null&&spd>limit+5;if(over){beep();if(!S.over){logEvt('تجاوز السرعة '+spd+'/'+limit)}}S.over=over;
+  // معلومات الخطوط
+  const nm=s=>!s.c?'—':(s.y>.5?'أصفر':'أبيض')+(s.cov>.8?' متصل':' متقطع');
+  emerg=!!(B.c&&B.cov>.85&&B.y<=.5&&!lost);
+  const sg=dets.find(v=>v.class=='stop sign'),tl=dets.find(v=>v.class=='traffic light');
+  info=`يسار: ${nm(A)} · يمين: ${nm(B)}`+(emerg?' · 🟠 خط حافة/طوارئ':'')+(limit?` · 🔴 حد السرعة ${limit}`:'')
+    +(spd!=null?` · ${spd} كم/س`:'')+(over?' · ⚠ تجاوز السرعة':'')+(sg?' · 🛑 وقوف':'')+(tl?' · 🚦 إشارة':'');
+  setStatus(text+(vw?'  '+vw:''),alert||vw.includes('جداً'));
+  $('info').textContent=info;draw(alert,!!vw);
 }
-function draw(alert,carL,carR){
-  octx.clearRect(0,0,OW,OH);
-  if(L||R){const N=24,ys=[...Array(N)].map((_,i)=>i*BH/(N-1)),col=alert?'255,59,48':'34,197,94';
-    const lx=ys.map(y=>L?xat(L,y):xat(R,y)-laneW),rx=ys.map(y=>R?xat(R,y):xat(L,y)+laneW);
+function draw(alert,warn){
+  octx.clearRect(0,0,OW,OH);const A=S[0],B=S[1];
+  if(A.c||B.c){const ys=[...Array(24)].map((_,i)=>i*BH/23);
+    const lxf=y=>A.c?xat(A.c,y):xat(B.c,y)-laneW,rxf=y=>B.c?xat(B.c,y):xat(A.c,y)+laneW;
     const P=(x,y)=>{const[a,b]=apply(Hi,x,y);return[a*K,b*K]};
-    const path=f=>ys.forEach((y,i)=>{const[a,b]=P(f(i),y);i?octx.lineTo(a,b):octx.moveTo(a,b)});
-    const g=octx.createLinearGradient(0,P(BW/2,BH)[1],0,P(BW/2,0)[1]);
-    g.addColorStop(0,`rgba(${col},.55)`);g.addColorStop(1,`rgba(${col},0)`);
-    octx.beginPath();path(i=>lx[i]);for(let i=N-1;i>=0;i--){const[a,b]=P(rx[i],ys[i]);octx.lineTo(a,b)}
+    const rgb=alert?'255,59,48':warn?'251,146,60':'45,212,191';
+    const g=octx.createLinearGradient(0,OH,0,OH*.4);g.addColorStop(0,`rgba(${rgb},.45)`);g.addColorStop(1,`rgba(${rgb},0)`);
+    octx.beginPath();ys.forEach((y,i)=>{const[a,b]=P(lxf(y),y);i?octx.lineTo(a,b):octx.moveTo(a,b)});
+    for(let i=ys.length-1;i>=0;i--){const[a,b]=P(rxf(ys[i]),ys[i]);octx.lineTo(a,b)}
     octx.closePath();octx.fillStyle=g;octx.fill();
-    octx.lineCap='round';octx.lineJoin='round';
-    [[i=>lx[i],!!L&&missL==0],[i=>rx[i],!!R&&missR==0]].forEach(([f,ok])=>{
-      octx.beginPath();path(f);octx.shadowColor=`rgb(${col})`;octx.shadowBlur=14;octx.strokeStyle='#fff';
-      octx.lineWidth=5;octx.setLineDash(ok?[]:[18,14]);octx.stroke()});
-    octx.shadowBlur=0;octx.beginPath();path(i=>(lx[i]+rx[i])/2);octx.setLineDash([6,16]);
-    octx.strokeStyle=`rgba(${col},.9)`;octx.lineWidth=3;octx.stroke();
-    octx.strokeStyle='#f59e0b';octx.lineWidth=4;octx.setLineDash([10,8]);
-    [emL,emR].forEach(e=>{if(!e)return;octx.beginPath();path(i=>xat(e,ys[i]));octx.stroke()});
-    octx.setLineDash([])}
+    for(const t of[.2,.4,.6,.8]){const y=BH*t,m=(lxf(y)+rxf(y))/2,h=laneW*.16;   // أسهم على المسار
+      octx.beginPath();[[m-h,y+8],[m,y],[m+h,y+8]].forEach(([x,yy],i)=>{const[a,b]=P(x,yy);i?octx.lineTo(a,b):octx.moveTo(a,b)});
+      octx.strokeStyle=`rgba(255,255,255,${.25+.5*t})`;octx.lineWidth=2+5*t;octx.lineCap='round';octx.lineJoin='round';octx.stroke()}
+    [[A,lxf],[B,rxf]].forEach(([s,f],i)=>{
+      octx.beginPath();ys.forEach((y,j)=>{const[a,b]=P(f(y),y);j?octx.lineTo(a,b):octx.moveTo(a,b)});
+      const col=(emerg&&i==1)?'#fb923c':s.y>.5?'#facc15':'#f8fafc';
+      octx.save();octx.setLineDash(s.c&&s.cov>.8?[]:[26,16]);octx.globalAlpha=s.c?(s.miss?.6:1):.4;
+      octx.shadowColor=col;octx.shadowBlur=14;octx.strokeStyle=col;octx.lineWidth=6;octx.stroke();octx.restore()})}
+  for(const v of dets){if(!VEH.has(v.class))continue;const[x,y,w,h]=v.bbox;
+    octx.strokeStyle=v.inLane?'#fb923c':'rgba(255,255,255,.55)';octx.lineWidth=v.inLane?5:2;octx.strokeRect(x*K,y*K,w*K,h*K)}
   if(alert){octx.strokeStyle='#ff3b30';octx.lineWidth=14;octx.strokeRect(0,0,OW,OH)}
   if(showBev){const im=bctx.createImageData(BW,BH);
     for(let i=0;i<bin.length;i++){const v=bin[i]?255:0;im.data.set([v,v,v,255],i*4)}bctx.putImageData(im,0,0)}
 }
-function idle(){ // أثناء المعايرة: نرسم النقاط
-  octx.clearRect(0,0,OW,OH);octx.fillStyle='#fde047';octx.strokeStyle='#22c55e';octx.lineWidth=3;
+function idle(){octx.clearRect(0,0,OW,OH);octx.fillStyle='#fde047';octx.strokeStyle='#22c55e';octx.lineWidth=3;
   octx.beginPath();pts.forEach(([x,y],i)=>{i?octx.lineTo(x*K,y*K):octx.moveTo(x*K,y*K)});octx.stroke();
-  pts.forEach(([x,y],i)=>{octx.beginPath();octx.arc(x*K,y*K,8,0,7);octx.fill()})}
+  pts.forEach(([x,y])=>{octx.beginPath();octx.arc(x*K,y*K,8,0,7);octx.fill()})}
 function loop(){requestAnimationFrame(loop);
   if(!running||video.readyState<2)return;
   pctx.drawImage(video,0,0,PW,PH);
   if(Hi)step();else{idle();setStatus('عايِر المسار (4 نقاط)',false)}}
 
-// ---------- أزرار ----------
+// ---------- مصادر الفيديو ----------
+function stopSrc(){video.pause();const s=video.srcObject;if(s)s.getTracks().forEach(t=>t.stop());
+  video.srcObject=null;video.removeAttribute('src');dets=[];limit=null;
+  if(gpsId!=null){navigator.geolocation.clearWatch(gpsId);gpsId=null;spd=null}}
+function loadCal(){const saved=localStorage.getItem(calKey);
+  if(saved){setCalib(JSON.parse(saved));$('msg').textContent='المعايرة محفوظة.';return true}resetCalib();return false}
 $('start').onclick=async()=>{
-  try{
-    actx=new (window.AudioContext||window.webkitAudioContext)();
+  try{actx=actx||new (window.AudioContext||window.webkitAudioContext)();stopSrc();src='cam';calKey='pts-cam';
     const s=await navigator.mediaDevices.getUserMedia({video:{facingMode:{ideal:'environment'},width:{ideal:1280},height:{ideal:720}},audio:false});
-    video.srcObject=s;await video.play();running=true;$('start').style.display='none';
+    video.loop=false;video.srcObject=s;await video.play();running=true;$('pp').style.display='none';
+    $('stage').style.aspectRatio='16/9';initModel();
     try{await navigator.wakeLock.request('screen')}catch(e){}
-    const saved=localStorage.getItem('lanepts');
-    if(saved){setCalib(JSON.parse(saved));$('msg').textContent='المعايرة محفوظة. ثبّت الجوال وانطلق.'}else resetCalib();
+    try{gpsId=navigator.geolocation.watchPosition(p=>{spd=p.coords.speed!=null?Math.round(p.coords.speed*3.6):null},()=>{},{enableHighAccuracy:true})}catch(e){}
+    loadCal();
   }catch(e){$('msg').textContent='ما اشتغلت الكاميرا: '+e.message+' (لازم https وإذن الكاميرا)'}};
-$('cal').onclick=()=>{if(running)resetCalib()};
-$('fix').onclick=()=>{sens=Math.min(2.5,sens+.2);localStorage.setItem('lanesens',sens.toFixed(2));
-  bad=0;flash=0;$('fix').style.display='none';logEvt('تصحيح مستخدم (حساسية الآن x'+sens.toFixed(1)+')')};
-$('learnrst').onclick=()=>{sens=1;localStorage.setItem('lanesens','1');logEvt('إعادة ضبط التعلّم')};
+$('file').onchange=e=>{const f=e.target.files[0];if(!f)return;
+  actx=actx||new (window.AudioContext||window.webkitAudioContext)();stopSrc();src='file';calKey='pts-file-'+f.name;
+  video.muted=true;video.loop=true;video.src=URL.createObjectURL(f);running=true;$('pp').style.display='';
+  video.onloadedmetadata=()=>{$('stage').style.aspectRatio=video.videoWidth/video.videoHeight;video.currentTime=.5;
+    if(loadCal())video.play();else video.pause()};initModel()};
+$('pp').onclick=()=>video.paused?video.play():video.pause();
+$('cal').onclick=()=>{if(running){resetCalib();if(src=='file')video.pause()}};
 $('logb').onclick=()=>{const b=$('log');b.style.display=b.style.display=='block'?'none':'block';showLog()};
 $('dbg').onclick=()=>{showBev=!showBev;bevC.style.display=showBev?'block':'none'};
-$('up').onclick=()=>{actx=actx||new (window.AudioContext||window.webkitAudioContext)();$('file').click()};
-$('file').onchange=async e=>{const f=e.target.files[0];if(!f)return;
-  if(video.srcObject){video.srcObject.getTracks().forEach(t=>t.stop());video.srcObject=null}
-  testMode=true;video.src=URL.createObjectURL(f);video.loop=true;video.muted=true;
-  try{await video.play()}catch(err){$('msg').textContent='تعذر تشغيل الفيديو: '+err.message;return}
-  running=true;Hi=null;pts=[];L=R=null;$('start').style.display='none';$('back').style.display='';
-  $('msg').textContent='وضع فحص الفيديو (للتجربة فقط): اضغط 4 نقاط على خطي المسار: بعيد-يسار، بعيد-يمين، قريب-يمين، قريب-يسار.'};
-$('back').onclick=()=>location.reload();
 bevC.style.display='none';
 loop();
 if('serviceWorker' in navigator)navigator.serviceWorker.register('sw.js').catch(()=>{});
