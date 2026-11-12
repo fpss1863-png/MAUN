@@ -44,6 +44,7 @@ body{display:flex;flex-direction:column;align-items:center;gap:10px;padding:env(
 #log{display:none;width:min(560px,94vw);max-height:28vh;overflow:auto;border-radius:14px;padding:8px 14px;font-size:14px}
 #log div{padding:4px 0;border-bottom:1px solid var(--line)}
 #dock{display:flex;gap:8px;flex-wrap:wrap;justify-content:center;padding-bottom:10px}
+#log .ev{display:flex;gap:8px;align-items:center;flex-wrap:wrap}#log img{border-radius:8px}#log .ev button{padding:5px 10px;font-size:13px}
 button,.btn{display:inline-block;color:var(--fg);background:var(--glass);border:1px solid var(--line);border-radius:12px;padding:10px 16px;font-size:15px;cursor:pointer;backdrop-filter:blur(10px)}
 button.main{background:linear-gradient(135deg,#2563eb,#38bdf8);border:0;font-weight:700;padding:12px 26px;font-size:17px}
 </style>
@@ -63,16 +64,20 @@ button.main{background:linear-gradient(135deg,#2563eb,#38bdf8);border:0;font-wei
     <div class="row"><button id="start" class="main">ابدأ الكاميرا</button><label class="btn" for="file">فحص فيديو</label></div>
   </div></div>
 </div>
-<div id="msg">ضع الجوال أفقياً على الزجاج الأمامي. المعايرة تلقائية.</div>
+<div id="msg" title="لا تضغط الأزرار أثناء القيادة">ضع الجوال أفقياً على الزجاج الأمامي. المعايرة تلقائية.</div>
 <div id="log" class="glass"></div>
 <div id="dock">
   <button id="cam">كاميرا</button><label class="btn" for="file">فيديو</label><input id="file" type="file" accept="video/*" hidden>
   <button id="cal">معايرة تلقائية</button><button id="man">معايرة يدوية</button>
   <button id="pp" style="display:none">إيقاف/تشغيل</button><button id="mlf">موديل من ملف</button><input id="mlfile" type="file" accept=".onnx" hidden><button id="mlu">موديل من رابط</button><button id="mlt">🧠 الذكاء</button>
+  <button id="fn">فاتني تنبيه</button><button id="bl">الخطوط غلط</button><button id="sync">مزامنة Supabase</button>
   <button id="logb">السجل</button><button id="dbg">المنظور</button>
 </div>
 <script>
 const C={PW:480,PH:270,BW:180,BH:150,P:91,MINL:110,SM:.25,MISS:12,HOLD:12,CAR:350,EARLY:.15,WARN:.22,WARNF:6,CALF:45,NEAR:.8};
+const cfg0=JSON.parse(localStorage.getItem('lanecfg')||'{}');   // ما تعلّمه الموقع من تصحيحاتك
+for(const k of['WARN','EARLY','P'])if(typeof cfg0[k]=='number')C[k]=cfg0[k];
+let bias=cfg0.bias||0;const saveCfg=()=>localStorage.setItem('lanecfg',JSON.stringify({WARN:C.WARN,EARLY:C.EARLY,P:C.P,bias}));
 const {PW,PH,BW,BH}=C, OW=960, OH=540, K=OW/PW, VEH=new Set(['car','truck','bus','motorcycle']);
 const $=id=>document.getElementById(id);
 const video=$('video'),ov=$('ov'),octx=ov.getContext('2d');
@@ -136,7 +141,9 @@ function runDet(){if(!model||detBusy)return;detBusy=true;
 // ---------- موديل مسارات (UFLD v1 عبر ONNX Runtime Web) ----------
 const ml={sess:null,on:false,busy:false,lanes:null,pick:null,t:0,ms:0,si:0,fails:0,err:''},ML_SIZES=[[288,800],[200,800],[320,800],[320,1600]];
 const mc=document.createElement('canvas'),mctx=mc.getContext('2d',{willReadFrequently:true});
-const idb=()=>new Promise((ok,no)=>{const r=indexedDB.open('lane',1);r.onupgradeneeded=()=>r.result.createObjectStore('m');r.onsuccess=()=>ok(r.result);r.onerror=no});
+const idb=()=>new Promise((ok,no)=>{const r=indexedDB.open('lane',2);r.onupgradeneeded=()=>{const d=r.result;
+  if(!d.objectStoreNames.contains('m'))d.createObjectStore('m');if(!d.objectStoreNames.contains('e'))d.createObjectStore('e',{keyPath:'id',autoIncrement:true})};
+  r.onsuccess=()=>ok(r.result);r.onerror=no});
 const idbGet=async k=>{const d=await idb();return new Promise(ok=>{const q=d.transaction('m').objectStore('m').get(k);q.onsuccess=()=>ok(q.result)})};
 const idbSet=async(k,v)=>{const d=await idb();return new Promise(ok=>{const t=d.transaction('m','readwrite');t.objectStore('m').put(v,k);t.oncomplete=ok})};
 let mlInit=false,mlLastT=-1;const mlAcc=[];
@@ -272,8 +279,38 @@ function speak(t){const n=performance.now();if(!window.speechSynthesis||n-lastSp
   try{const u=new SpeechSynthesisUtterance(t);u.lang='ar-SA';u.rate=1.1;speechSynthesis.speak(u)}catch(e){}}
 function logEvt(type){const a=JSON.parse(localStorage.getItem('lanelog')||'[]');
   a.unshift({t:new Date().toLocaleString('ar-SA'),type});localStorage.setItem('lanelog',JSON.stringify(a.slice(0,200)))}
-function showLog(){const a=JSON.parse(localStorage.getItem('lanelog')||'[]'),b=$('log');
-  b.innerHTML=a.length?a.map(e=>`<div>${e.t} — ${e.type}</div>`).join(''):'لا توجد تنبيهات بعد.'}
+const req=r=>new Promise((ok,no)=>{r.onsuccess=()=>ok(r.result);r.onerror=()=>no(r.error)});
+const store=async m=>(await idb()).transaction('e',m).objectStore('e');
+const evdb={async add(e){return req((await store('readwrite')).add(e))},async all(){return req((await store('readonly')).getAll())},
+  async put(e){return req((await store('readwrite')).put(e))},
+  async trim(){const s=await store('readwrite'),k=await req(s.getAllKeys());for(const x of k.slice(0,Math.max(0,k.length-300)))s.delete(x)}};
+const sc=document.createElement('canvas');sc.width=320;sc.height=180;const sctx=sc.getContext('2d');let ring=[],rc=0;
+const KIND={alert:'تنبيه انحراف',missed:'فاتني تنبيه',badlines:'الخطوط غلط'};
+async function saveEv(kind,x){try{await evdb.add(Object.assign({t:Date.now(),kind,label:null,src,spd,limit,ml:!!mlFresh(),
+  params:{WARN:C.WARN,EARLY:C.EARLY,P:C.P,bias},imgs:ring.slice(-4),sent:false},x||{}));evdb.trim()}catch(e){}}
+async function showLog(){const b=$('log');let a=[];try{a=(await evdb.all()).reverse().slice(0,30)}catch(e){}
+  b.innerHTML=a.length?a.map(e=>`<div class="ev">${e.imgs[e.imgs.length-1]?`<img src="${e.imgs[e.imgs.length-1]}" width="96">`:''}<span>${new Date(e.t).toLocaleString('ar-SA')} — ${KIND[e.kind]||e.kind}${e.label?(e.label=='ok'?' ✓':' ✗'):''}</span>${e.kind=='alert'?`<button data-i="${e.id}" data-l="ok">✓ صح</button><button data-i="${e.id}" data-l="bad">✗ خطأ</button>`:''}</div>`).join(''):'لا توجد أحداث بعد. التنبيهات تنحفظ هنا تلقائياً.'}
+async function learn(id,label){const e=(await evdb.all()).find(x=>x.id==id);if(!e)return;e.label=label;await evdb.put(e);
+  if(e.kind=='alert'&&label=='bad'){C.WARN=Math.min(.45,C.WARN*1.12);C.EARLY=Math.min(C.WARN-.05,C.EARLY*1.1);   // تنبيه خاطئ: نخفف الحساسية ونصحّح مركز المسار
+    bias=Math.max(-.3,Math.min(.3,bias+.4*((e.dev||0)-bias)))}
+  if(e.kind=='alert'&&label=='ok')C.WARN=Math.max(.14,C.WARN*.985);
+  saveCfg();showLog();$('msg').textContent=`تعلّمت. حد الانحراف الآن ${C.WARN.toFixed(2)}`}
+async function sync(){let sb=JSON.parse(localStorage.getItem('sb')||'null');
+  if(!sb){const url=prompt('رابط مشروع Supabase (https://xxxx.supabase.co)'),key=url&&prompt('المفتاح anon');if(!key)return;sb={url:url.replace(/\/$/,''),key};localStorage.setItem('sb',JSON.stringify(sb))}
+  let dv=localStorage.getItem('devid');if(!dv){dv=Math.random().toString(36).slice(2,10);localStorage.setItem('devid',dv)}
+  const H={apikey:sb.key,Authorization:'Bearer '+sb.key};let n=0;
+  try{for(const e of(await evdb.all()).filter(x=>!x.sent&&(x.label||x.kind!='alert'))){const paths=[];
+      for(let i=0;i<e.imgs.length;i++){const p=`${dv}/${e.t}_${i}.jpg`,r=await fetch(`${sb.url}/storage/v1/object/snapshots/${p}`,{method:'POST',headers:{...H,'Content-Type':'image/jpeg'},body:await(await fetch(e.imgs[i])).blob()});
+        if(!r.ok)throw new Error('الصور '+r.status);paths.push(p)}
+      const r=await fetch(`${sb.url}/rest/v1/events`,{method:'POST',headers:{...H,'Content-Type':'application/json',Prefer:'return=minimal'},
+        body:JSON.stringify({device:dv,t:new Date(e.t).toISOString(),kind:e.kind,label:e.label,dev:e.dev??null,off:e.off??null,params:{...e.params,ml:e.ml,src:e.src,spd:e.spd,limit:e.limit},paths})});
+      if(!r.ok)throw new Error('الجدول '+r.status);e.sent=true;await evdb.put(e);n++}
+    $('msg').textContent=`تم رفع ${n} حدث. (الأحداث غير المصنّفة تنتظر تقييمك ✓/✗)`}catch(x){$('msg').textContent='فشل الرفع: '+x.message+' — راجع supabase.sql'}}
+// ضبط ذاتي: نجرّب حساسية الأبيض ونبقي اللي يعطي خطوط أثبت (بدون تدخل منك)
+let qN=0,qS=0,qD=0;const tune={best:null,bestP:null,dir:-2};
+function tuneStep(){if(++qN<450)return;const got=qS/qN,sc2=got-.7*qD/qN;qN=qS=qD=0;if(got<.15||got>.97||wasLost)return;   // ما نلعب بالحساسية إذا الوضع ممتاز أو ما فيه خطوط
+  if(tune.best==null||sc2>tune.best){tune.best=sc2;tune.bestP=C.P}else{C.P=tune.bestP;tune.dir=-tune.dir}
+  C.P=Math.max(84,Math.min(96,tune.bestP+tune.dir));saveCfg()}
 function setStatus(t,a){$('status').textContent=t;$('pill').className='glass '+(a?'alert':/اقتربت|سيارة|تغيير|تجاوز/.test(t)?'warn':/فقدت|عايِر|يتعلم|معايرة/.test(t)?'idle':'ok')}
 
 let emerg=false,vw='',info='';
@@ -284,12 +321,12 @@ function step(){
   const cars=[cLp>C.CAR,cRp>C.CAR],mid=BW/2;
   for(const i of[0,1]){const s=S[i];s.car=cars[i]?s.car+1:0;const frz=s.car>0&&s.car<=40;
     const r=frz?null:(mlFresh()?mlLine(i):findLine(i?mid:0,i?BW:mid,s.c?xat(s.c,BH):null,relax));
-    const n=accept(s.c,r&&r.c,s.rej);s.rej=(r&&!n)?s.rej+1:0;
+    const n=accept(s.c,r&&r.c,s.rej);s.rej=(r&&!n)?s.rej+1:0;if(r&&!n)qD++;
     if(n){s.c=blend(s.c,n);s.miss=0;s.cov=.8*s.cov+.2*r.cov;s.y=.8*s.y+.2*r.y;s.seen=true;s.ml=!!r.ml}
     else{s.seen=false;if(!frz&&++s.miss>C.MISS)s.c=null}s.frz=frz}
-  const A=S[0],B=S[1];
+  const A=S[0],B=S[1];if(A.seen&&B.seen)qS++;tuneStep();
   if(A.c&&B.c){const w0=xat(B.c,0)-xat(A.c,0),w1=xat(B.c,BH)-xat(A.c,BH),r0=BW/3;   // الخطين لازم يكوّنون مسار منطقي
-    if(w1<.55*r0||w1>1.7*r0||w0<.4*r0||w0>2*r0){const dr=A.cov<B.cov?A:B;dr.c=null;dr.seen=false;dr.miss=99}}
+    if(w1<.55*r0||w1>1.7*r0||w0<.4*r0||w0>2*r0){const dr=A.cov<B.cov?A:B;dr.c=null;dr.seen=false;dr.miss=99;qD++}}
   // فقدان كلي: نوقف ونبدأ من جديد
   const lost=!(A.c||B.c)||Math.min(A.miss,B.miss)>C.HOLD;
   if(lost){if(!wasLost){acc.fill(0);base=null;calib=[];bad=0;lastOff=null}S.forEach(s=>{s.c=null;s.rej=0});wasLost=true}
@@ -305,10 +342,10 @@ function step(){
   if(off!=null){
     if(base==null){calib.push(off);text=`يتعلم وضعك ${calib.length}/${C.CALF}`;
       if(calib.length>=C.CALF)base=calib.slice().sort((a,b)=>a-b)[calib.length>>1]}
-    else{const dev=off-base,vel=dev-devPrev,a=Math.abs(dev),dir=dev<0?'اليمين':'اليسار';devPrev=dev;
+    else{const dev=off-base-bias,vel=dev-devPrev,a=Math.abs(dev),dir=dev<0?'اليمين':'اليسار';devPrev=dev;
       $('gmark').style.left=(50-Math.max(-1,Math.min(1,dev/.5))*45)+'%';
       if(a>C.WARN){bad++;okRun=0}else{bad=0;okRun++}
-      if(!alertOn&&bad>=C.WARNF){alertOn=true;logEvt('انحراف نحو '+dir);speak('انتبه، انحراف نحو '+dir)}
+      if(!alertOn&&bad>=C.WARNF){alertOn=true;logEvt('انحراف نحو '+dir);saveEv('alert',{dev:off-base,off});speak('انتبه، انحراف نحو '+dir)}
       if(alertOn&&okRun>=8)alertOn=false;
       if(alertOn){alert=true;text='⚠ انحراف نحو '+dir+'!';beep(1,650)}
       else if(a>C.EARLY&&vel*dev>0){if(++earlyN>=4){text='اقتربت من خط '+dir;beep(0,1500)}}else earlyN=0}}
@@ -366,6 +403,7 @@ function idle(){octx.clearRect(0,0,OW,OH);octx.fillStyle='#fde047';octx.strokeSt
 function loop(){requestAnimationFrame(loop);
   if(!running||video.readyState<2)return;
   pctx.drawImage(video,0,0,PW,PH);runML();
+  if(++rc%15==0){sctx.drawImage(video,0,0,320,180);ring.push(sc.toDataURL('image/jpeg',.6));if(ring.length>8)ring.shift()}
   if(Hi)step();
   else if(auto){octx.clearRect(0,0,OW,OH);setStatus('معايرة تلقائية '+Math.min(99,Math.round(aN/14*100))+'%',false);(ml.sess&&ml.on)?mlCalStep():autoStep()}
   else{idle();setStatus('عايِر المسار (4 نقاط)',false)}}
@@ -423,6 +461,11 @@ $('pp').onclick=()=>video.paused?video.play():video.pause();
 $('cal').onclick=()=>{if(running){auto=true;resetCalib()}};
 $('man').onclick=()=>{if(running){auto=false;resetCalib();if(src=='file')video.pause()}};
 $('cam').onclick=$('start').onclick;
+$('log').onclick=e=>{const b=e.target.closest('button[data-i]');if(b)learn(+b.dataset.i,b.dataset.l)};
+$('fn').onclick=()=>{C.WARN=Math.max(.12,C.WARN*.9);C.EARLY=Math.min(C.WARN-.04,Math.max(.08,C.EARLY*.92));saveCfg();saveEv('missed');
+  $('msg').textContent=`سجّلت إنه فاتك تنبيه. زدت الحساسية (${C.WARN.toFixed(2)}).`};
+$('bl').onclick=()=>{saveEv('badlines');if(running){auto=true;resetCalib();$('msg').textContent='سجّلت إن الخطوط غلط، وأعدت المعايرة.'}};
+$('sync').onclick=sync;
 $('mlf').onclick=()=>$('mlfile').click();
 $('mlfile').onchange=async e=>{const f=e.target.files[0];if(!f)return;$('msg').textContent='جاري قراءة الموديل…';
   const b=await f.arrayBuffer();try{await idbSet('ufld',b)}catch(x){}loadML(b)};
