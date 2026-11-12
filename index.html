@@ -13,46 +13,65 @@
 <link rel="apple-touch-icon" href="icon-180.png">
 <link rel="icon" href="icon-192.png">
 <style>
-:root{--bg:#0b0d10;--fg:#f2f4f7;--warn:#ff3b30;--mut:#8b95a1;--btn:#1c2128}
+:root{--bg:#06080c;--glass:rgba(16,20,28,.62);--line:rgba(255,255,255,.12);--fg:#f4f6fa;--mut:#9aa6b4;--ok:#34d399;--warn:#fbbf24;--bad:#ff453a;--acc:#38bdf8}
 *{box-sizing:border-box}
-html,body{margin:0;height:100%;background:var(--bg);color:var(--fg);font-family:system-ui,-apple-system,"Segoe UI",Tahoma,sans-serif}
-body{display:flex;flex-direction:column;align-items:center;gap:8px;padding:env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left)}
-#stage{position:relative;width:min(100vw,calc((100vh - 110px)*16/9));aspect-ratio:16/9;background:#000;margin-top:6px}
+html,body{margin:0;min-height:100%;background:radial-gradient(1200px 600px at 50% -10%,#10203a,#06080c);color:var(--fg);font-family:system-ui,-apple-system,"Segoe UI",Tahoma,sans-serif}
+body{display:flex;flex-direction:column;align-items:center;gap:10px;padding:env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left)}
+.glass{background:var(--glass);backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);border:1px solid var(--line)}
+#stage{position:relative;width:min(100vw,calc((100vh - 130px)*16/9));aspect-ratio:16/9;background:#000;margin-top:6px;border-radius:18px;overflow:hidden;box-shadow:0 24px 70px rgba(0,0,0,.65),0 0 0 1px var(--line)}
 #stage video,#stage canvas{position:absolute;inset:0;width:100%;height:100%}
 #video{object-fit:fill}
-#status{position:absolute;top:8px;inset-inline-start:8px;font-weight:700;font-size:clamp(15px,3vw,26px);padding:4px 12px;border-radius:10px;background:rgba(0,0,0,.6)}
-#status.alert{background:var(--warn)}
-#bev{inset:auto !important;bottom:8px;inset-inline-end:8px;width:126px !important;height:105px !important;image-rendering:pixelated;border:1px solid #fff5;background:#000}
-#info{position:absolute;bottom:8px;inset-inline-start:8px;max-width:62%;font-size:clamp(12px,2.2vw,18px);padding:4px 10px;border-radius:10px;background:rgba(0,0,0,.6);line-height:1.5}
-.btn{display:inline-block;background:var(--btn);border:1px solid #333b45;border-radius:10px;padding:10px 16px;font-size:15px;cursor:pointer}
+#pill{position:absolute;top:10px;inset-inline-start:10px;display:flex;align-items:center;gap:8px;padding:7px 15px;border-radius:999px;font-weight:700;font-size:clamp(13px,2.6vw,22px);transition:background .2s}
+#dot{width:10px;height:10px;border-radius:50%;background:var(--ok);color:var(--ok);box-shadow:0 0 10px currentColor}
+#pill.warn #dot{background:var(--warn);color:var(--warn)}#pill.idle #dot{background:var(--acc);color:var(--acc)}
+#pill.alert{background:rgba(255,69,58,.88);animation:pu .5s infinite alternate}#pill.alert #dot{background:#fff;color:#fff}
+@keyframes pu{to{transform:scale(1.06)}}
+#hud{position:absolute;top:10px;inset-inline-end:10px;display:flex;gap:10px;align-items:center}
+.sign{display:none;width:clamp(44px,9vw,78px);aspect-ratio:1;border-radius:50%;background:#fff;border:clamp(5px,1vw,9px) solid #e11d1d;place-items:center;color:#111;font-weight:800;font-size:clamp(16px,3.6vw,30px);box-shadow:0 4px 18px rgba(0,0,0,.5)}
+#spdbox{padding:7px 14px;border-radius:14px;text-align:center;line-height:1.05}
+#spdbox b{font-size:clamp(20px,4.6vw,40px)}#spdbox small{display:block;color:var(--mut);font-size:11px}
+#spdbox.over{background:rgba(255,69,58,.88)}
+#chips{position:absolute;bottom:40px;inset-inline-start:10px;display:flex;gap:6px;flex-wrap:wrap;max-width:60%}
+#chips span{padding:4px 11px;border-radius:999px;font-size:clamp(11px,2vw,15px);background:var(--glass);border:1px solid var(--line);backdrop-filter:blur(10px)}
+#gauge{position:absolute;bottom:14px;left:50%;transform:translateX(-50%);width:min(40%,340px);height:8px;border-radius:99px;background:linear-gradient(90deg,var(--bad),var(--warn) 22%,var(--ok) 38%,var(--ok) 62%,var(--warn) 78%,var(--bad));opacity:.85}
+#gmark{position:absolute;top:-5px;left:50%;width:18px;height:18px;margin-left:-9px;border-radius:50%;background:#fff;box-shadow:0 0 0 3px rgba(0,0,0,.45),0 0 14px #fff;transition:left .12s}
+#bev{inset:auto !important;bottom:10px;inset-inline-end:10px;width:126px !important;height:105px !important;image-rendering:pixelated;border:1px solid #fff5;border-radius:8px;background:#000}
+#intro{position:absolute;inset:0;display:grid;place-items:center;text-align:center;padding:16px;background:radial-gradient(circle at 50% 25%,rgba(16,38,70,.93),rgba(4,6,10,.97))}
+#intro h1{margin:8px 0 4px;font-size:clamp(22px,5vw,40px);letter-spacing:.3px}
+#intro p{margin:0 0 16px;color:var(--mut);font-size:clamp(13px,2.4vw,18px)}
+#intro .row{display:flex;gap:10px;justify-content:center;flex-wrap:wrap}
 #msg{color:var(--mut);font-size:14px;text-align:center;padding:0 12px;min-height:20px}
-#bar{display:flex;gap:8px;flex-wrap:wrap;justify-content:center;padding-bottom:8px}
-button{background:var(--btn);color:var(--fg);border:1px solid #333b45;border-radius:10px;padding:10px 16px;font-size:15px}
-#log{display:none;width:min(560px,94vw);max-height:30vh;overflow:auto;background:#12161b;border:1px solid #2a313a;border-radius:10px;padding:8px 12px;font-size:14px}
-#log div{padding:3px 0;border-bottom:1px solid #222a33}
-button.main{background:#2563eb;border-color:#2563eb}
+#log{display:none;width:min(560px,94vw);max-height:28vh;overflow:auto;border-radius:14px;padding:8px 14px;font-size:14px}
+#log div{padding:4px 0;border-bottom:1px solid var(--line)}
+#dock{display:flex;gap:8px;flex-wrap:wrap;justify-content:center;padding-bottom:10px}
+button,.btn{display:inline-block;color:var(--fg);background:var(--glass);border:1px solid var(--line);border-radius:12px;padding:10px 16px;font-size:15px;cursor:pointer;backdrop-filter:blur(10px)}
+button.main{background:linear-gradient(135deg,#2563eb,#38bdf8);border:0;font-weight:700;padding:12px 26px;font-size:17px}
 </style>
 </head>
 <body>
 <div id="stage">
   <video id="video" playsinline muted></video>
   <canvas id="ov" width="960" height="540"></canvas>
-  <div id="status">اضغط ابدأ</div>
+  <div id="pill" class="glass idle"><i id="dot"></i><span id="status">جاهز</span></div>
+  <div id="hud"><div id="limit" class="sign"><span id="limv"></span></div><div id="spdbox" class="glass"><b id="spd">--</b><small>كم/س</small></div></div>
+  <div id="chips"></div>
+  <div id="gauge"><i id="gmark"></i></div>
   <canvas id="bev" width="180" height="150"></canvas>
-  <div id="info"></div>
+  <div id="intro"><div>
+    <svg width="84" height="84" viewBox="0 0 84 84"><rect width="84" height="84" rx="20" fill="#0f1b2d"/><path d="M34 14h16l22 58H12z" fill="#1f2c40"/><path d="M38 14L18 72M46 14l20 58" stroke="#f4f6fa" stroke-width="3" fill="none"/><path d="M42 22v8M42 38v10M42 56v14" stroke="#fde047" stroke-width="3.5" stroke-linecap="round"/></svg>
+    <h1>مساعد المسار</h1><p>كشف المسار والسيارات ولوحات السرعة · معايرة تلقائية</p>
+    <div class="row"><button id="start" class="main">ابدأ الكاميرا</button><label class="btn" for="file">فحص فيديو</label></div>
+  </div></div>
 </div>
-<div id="msg">ضع الجوال أفقياً على الزجاج الأمامي.</div>
-<div id="log"></div>
-<div id="bar">
-  <button id="start" class="main">ابدأ الكاميرا</button>
-  <button id="cal">إعادة المعايرة</button>
-  <label class="btn" for="file">فحص فيديو</label><input id="file" type="file" accept="video/*" hidden>
-  <button id="pp" style="display:none">إيقاف/تشغيل</button>
-  <button id="logb">سجل التنبيهات</button>
-  <button id="dbg">نافذة المنظور</button>
+<div id="msg">ضع الجوال أفقياً على الزجاج الأمامي. المعايرة تلقائية.</div>
+<div id="log" class="glass"></div>
+<div id="dock">
+  <button id="cam">كاميرا</button><label class="btn" for="file">فيديو</label><input id="file" type="file" accept="video/*" hidden>
+  <button id="cal">معايرة تلقائية</button><button id="man">معايرة يدوية</button>
+  <button id="pp" style="display:none">إيقاف/تشغيل</button><button id="logb">السجل</button><button id="dbg">المنظور</button>
 </div>
 <script>
-const C={PW:480,PH:270,BW:180,BH:150,P:91,MINL:110,SM:.2,MISS:45,HOLD:30,CAR:350,WARN:.25,WARNF:20,CALF:60};
+const C={PW:480,PH:270,BW:180,BH:150,P:91,MINL:110,SM:.25,MISS:12,HOLD:12,CAR:350,EARLY:.15,WARN:.22,WARNF:6,CALF:45};
 const {PW,PH,BW,BH}=C, OW=960, OH=540, K=OW/PW, VEH=new Set(['car','truck','bus','motorcycle']);
 const $=id=>document.getElementById(id);
 const video=$('video'),ov=$('ov'),octx=ov.getContext('2d');
@@ -89,13 +108,15 @@ const S=[0,1].map(()=>({c:null,miss:0,rej:0,y:0,cov:1,car:0,seen:false}));
 let laneW=BW/3,calib=[],base=null,bad=0,lastOff=null,lastBoth=-999,flash=0,fn=0,lastBeep=0,actx=null,wasLost=false;
 let model=null,modelP=null,dets=[],detBusy=false,limit=null,limitT=0,ocrBusy=false,tess=null,reads=[],spd=null,gpsId=null;
 
+let auto=true,earlyN=0,devPrev=0,alertOn=false,okRun=0,lastSpeak=0;
 function resetState(){S.forEach(s=>Object.assign(s,{c:null,miss:0,rej:0,y:0,cov:1,car:0,seen:false}));
-  acc.fill(0);calib=[];base=null;bad=0;lastOff=null;wasLost=false;laneW=BW/3}
+  acc.fill(0);calib=[];base=null;bad=0;lastOff=null;wasLost=false;laneW=BW/3;alertOn=false;earlyN=0;devPrev=0;okRun=0}
 function setCalib(p){pts=p;yF=Math.min(p[0][1],p[1][1])|0;yN=Math.max(p[2][1],p[3][1])|0;
   const d=[[BW/3,0],[BW*2/3,0],[BW*2/3,BH],[BW/3,BH]];Hi=homography(d,p);Hf=homography(p,d);resetState()}
-function resetCalib(){pts=[];Hi=null;localStorage.removeItem(calKey);resetState();
+function resetCalib(){pts=[];Hi=null;localStorage.removeItem(calKey);resetState();ah.fill(0);macc.fill(0);aN=0;aFr=0;
+  if(auto){$('msg').textContent='معايرة تلقائية: سر على الطريق وخلّ الخطوط ظاهرة…';return}
   $('msg').textContent='اضغط 4 نقاط على خطي مسارك: 1 بعيد-يسار، 2 بعيد-يمين، 3 قريب-يمين، 4 قريب-يسار (فوق الكبوت).'}
-ov.addEventListener('pointerdown',e=>{if(Hi||!running)return;
+ov.addEventListener('pointerdown',e=>{if(Hi||!running||auto)return;
   const r=ov.getBoundingClientRect();pts.push([(e.clientX-r.left)/r.width*PW,(e.clientY-r.top)/r.height*PH]);
   if(pts.length==4){if(pts[0][1]<pts[3][1]&&pts[1][1]<pts[2][1]){
       localStorage.setItem(calKey,JSON.stringify(pts));setCalib(pts);$('msg').textContent='تمت المعايرة.';if(src=='file')video.play()}
@@ -106,8 +127,10 @@ function initModel(){if(modelP)return;modelP=(async()=>{try{
   await loadScript('https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.22.0/dist/tf.min.js');
   await loadScript('https://cdn.jsdelivr.net/npm/@tensorflow-models/coco-ssd@2.2.3/dist/coco-ssd.min.js');
   model=await cocoSsd.load({base:'lite_mobilenet_v2'})}catch(e){$('msg').textContent='تعذر تحميل كاشف السيارات (يحتاج نت أول مرة).'}})()}
+const iou=(a,b)=>{const x=Math.max(0,Math.min(a[0]+a[2],b[0]+b[2])-Math.max(a[0],b[0])),y=Math.max(0,Math.min(a[1]+a[3],b[1]+b[3])-Math.max(a[1],b[1])),i=x*y;return i/(a[2]*a[3]+b[2]*b[3]-i)};
 function runDet(){if(!model||detBusy)return;detBusy=true;
-  model.detect(pc,12,.45).then(r=>{dets=r}).catch(()=>{}).finally(()=>detBusy=false)}
+  model.detect(pc,12,.45).then(r=>{r.forEach(x=>x.t=fn);   // نحتفظ بالمربعات القديمة 10 فريمات عشان السيارة السريعة
+    dets=r.concat(dets.filter(o=>fn-o.t<10&&!r.some(n=>n.class==o.class&&iou(n.bbox,o.bbox)>.2)))}).catch(()=>{}).finally(()=>detBusy=false)}
 
 // ---------- لوحات السرعة ----------
 const cropC=document.createElement('canvas');cropC.width=cropC.height=96;
@@ -152,7 +175,7 @@ function makeMask(d,relax){
       if(v>(gray[o-k]+gray[o+k])/2+dd){const yel=d[i]>140&&d[i+1]>110&&d[i+2]<(d[i]+d[i+1])*.28;
         if(v>=thr||yel)mask[o]=yel?2:1}}}
   for(const b of dets){if(!VEH.has(b.class))continue;const[x,y,w,h]=b.bbox;   // السيارات ما تدخل في الكشف
-    for(let yy=Math.max(yF,y|0);yy<Math.min(yN,(y+h)|0);yy++)for(let xx=Math.max(0,(x-3)|0);xx<Math.min(PW,(x+w+3)|0);xx++)mask[yy*PW+xx]=0}}
+    for(let yy=Math.max(yF,(y-h*.1)|0);yy<Math.min(yN,(y+h*1.1)|0);yy++)for(let xx=Math.max(0,(x-w*.15)|0);xx<Math.min(PW,(x+w*1.15)|0);xx++)mask[yy*PW+xx]=0}}
 function makeBev(){let cL=0,cR=0;
   for(let by=0;by<BH;by++){for(let bx=0;bx<BW;bx++){const[x,y]=apply(Hi,bx,by),xi=x|0,yi=y|0;
       bev[by*BW+bx]=(xi>=0&&xi<PW&&yi>=yF&&yi<yN)?mask[yi*PW+xi]:0}
@@ -162,50 +185,58 @@ function makeBev(){let cL=0,cR=0;
   for(let i=0;i<bev.length;i++){acc[i]=.65*acc[i]+.35*(bev[i]?255:0);bin[i]=acc[i]>100?1:0}
   return[cL,cR]}
 function findLine(xs0,xe,prevX,relax){
+  if(prevX!=null){xs0=Math.max(0,Math.round(prevX)-14);xe=Math.min(BW,Math.round(prevX)+15)}  // ما نقفز بعيد عن الخط
+  if(xe-xs0<6)return null;
   const hist=new Float32Array(xe-xs0);let tot=0;
   for(let y=0;y<BH;y++)for(let x=xs0;x<xe;x++)if(bin[y*BW+x]){hist[x-xs0]++;tot++}
   if(tot<10)return null;
-  const h2=new Float32Array(hist.length);
-  for(let i=0;i<hist.length;i++){for(let j=-2;j<=2;j++)h2[i]+=hist[i+j]||0;
-    if(prevX!=null&&prevX>=xs0&&prevX<xe)h2[i]*=Math.exp(-((i+xs0-prevX)**2)/200)}
-  let cur=xs0,best=-1;for(let i=0;i<h2.length;i++)if(h2[i]>best){best=h2[i];cur=xs0+i}
-  const nw=10,wh=BH/nw,nmin=relax>=2?2:4,px=[],py=[];let hits=0,yc=0,tc=0;
+  let cur=xs0,best=-1;
+  for(let i=0;i<hist.length;i++){let h=0;for(let j=-2;j<=2;j++)h+=hist[i+j]||0;if(h>best){best=h;cur=xs0+i}}
+  const nw=10,wh=BH/nw,nmin=relax?2:4,px=[],py=[];let hits=0,yc=0,tc=0,sl=0;
   for(let i=0;i<nw;i++){const yh=BH-i*wh,yl=yh-wh;let sx=0,n=0;const tx=[],ty=[];
-    for(let y=Math.floor(yl);y<yh;y++)for(let x=Math.max(0,cur-8);x<Math.min(BW,cur+8);x++)
+    const lo=Math.max(0,Math.round(cur-10)),hi=Math.min(BW,Math.round(cur+11));
+    for(let y=Math.floor(yl);y<yh;y++)for(let x=lo;x<hi;x++)
       if(bin[y*BW+x]){tx.push(x);ty.push(y);sx+=x;n++;const v=bev[y*BW+x];if(v){tc++;if(v==2)yc++}}
-    if(n>=nmin){cur=Math.round(sx/n);px.push(...tx);py.push(...ty);hits++}}
-  if(hits<3||px.length<15)return null;
+    if(n>=nmin){const nc=Math.round(sx/n);sl=.5*sl+.5*(nc-cur);cur=nc;px.push(...tx);py.push(...ty);hits++}
+    else cur=Math.round(cur+sl)}                      // النافذة تتبع ميل الخط (للمنعطفات)
+  if(hits<(relax?3:4)||px.length<20)return null;
   const deg=hits>=5?2:1;let c=polyfit(py,px,deg);
   for(let t=0;t<2;t++){const ky=[],kx=[];
     for(let i=0;i<px.length;i++)if(Math.abs(xat(c,py[i])-px[i])<3.5){ky.push(py[i]);kx.push(px[i])}
     if(kx.length<12)break;c=polyfit(ky,kx,deg)}
   if(Math.abs(c[0])>3e-3||Math.abs(c[1])>.9||Math.abs(2*c[0]*BH+c[1])>.9)return null;
   return{c,cov:hits/nw,y:tc>5?yc/tc:0}}
-function accept(prev,nw,rej){
+function accept(prev,nw,rej){   // القريب ثابت، والبعيد يسمح له يتغير (انحناء)
   if(!nw||!prev||rej>=8)return nw;
-  const d=Math.max(Math.abs(xat(nw,BH*.3)-xat(prev,BH*.3)),Math.abs(xat(nw,BH)-xat(prev,BH)));
-  return d<.06*BW?nw:null}
-function beep(){const t=performance.now();if(!actx||t-lastBeep<2000)return;lastBeep=t;
-  const o=actx.createOscillator(),g=actx.createGain();o.frequency.value=1200;g.gain.value=.4;
-  o.connect(g);g.connect(actx.destination);o.start();o.stop(actx.currentTime+.25)}
+  const dn=Math.abs(xat(nw,BH)-xat(prev,BH)),dm=Math.abs(xat(nw,BH*.5)-xat(prev,BH*.5));
+  return(dn<.06*BW&&dm<.12*BW)?nw:null}
+function beep(strong,gap){const t=performance.now();gap=gap||2000;if(!actx||t-lastBeep<gap)return;lastBeep=t;
+  [[strong?1500:1000,0],[strong?1000:0,.16]].forEach(([f,d])=>{if(!f)return;const o=actx.createOscillator(),g=actx.createGain();
+    o.type='square';o.frequency.value=f;g.gain.value=strong?.9:.35;o.connect(g);g.connect(actx.destination);
+    o.start(actx.currentTime+d);o.stop(actx.currentTime+d+.14)});
+  if(strong&&navigator.vibrate)navigator.vibrate([200,80,200])}
+function speak(t){const n=performance.now();if(!window.speechSynthesis||n-lastSpeak<4000)return;lastSpeak=n;
+  try{const u=new SpeechSynthesisUtterance(t);u.lang='ar-SA';u.rate=1.1;speechSynthesis.speak(u)}catch(e){}}
 function logEvt(type){const a=JSON.parse(localStorage.getItem('lanelog')||'[]');
   a.unshift({t:new Date().toLocaleString('ar-SA'),type});localStorage.setItem('lanelog',JSON.stringify(a.slice(0,200)))}
 function showLog(){const a=JSON.parse(localStorage.getItem('lanelog')||'[]'),b=$('log');
   b.innerHTML=a.length?a.map(e=>`<div>${e.t} — ${e.type}</div>`).join(''):'لا توجد تنبيهات بعد.'}
-function setStatus(t,a){const s=$('status');s.textContent=t;s.classList.toggle('alert',!!a)}
+function setStatus(t,a){$('status').textContent=t;$('pill').className='glass '+(a?'alert':/اقتربت|سيارة|تغيير|تجاوز/.test(t)?'warn':/فقدت|عايِر|يتعلم|معايرة/.test(t)?'idle':'ok')}
 
 let emerg=false,vw='',info='';
 function step(){
   fn++;const d=pctx.getImageData(0,0,PW,PH).data;runDet();
-  const relax=wasLost?3:Math.min(3,Math.max(S[0].miss,S[1].miss)>>3);
+  const relax=wasLost?1:0;
   makeMask(d,relax);const[cLp,cRp]=makeBev();
   const cars=[cLp>C.CAR,cRp>C.CAR],mid=BW/2;
-  for(const i of[0,1]){const s=S[i];s.car=cars[i]?s.car+1:0;const frz=s.car>0&&s.car<=90;
+  for(const i of[0,1]){const s=S[i];s.car=cars[i]?s.car+1:0;const frz=s.car>0&&s.car<=40;
     const r=frz?null:findLine(i?mid:0,i?BW:mid,s.c?xat(s.c,BH):null,relax);
     const n=accept(s.c,r&&r.c,s.rej);s.rej=(r&&!n)?s.rej+1:0;
     if(n){s.c=blend(s.c,n);s.miss=0;s.cov=.8*s.cov+.2*r.cov;s.y=.8*s.y+.2*r.y;s.seen=true}
     else{s.seen=false;if(!frz&&++s.miss>C.MISS)s.c=null}s.frz=frz}
   const A=S[0],B=S[1];
+  if(A.c&&B.c){const w0=xat(B.c,0)-xat(A.c,0),w1=xat(B.c,BH)-xat(A.c,BH),r0=BW/3;   // الخطين لازم يكوّنون مسار منطقي
+    if(w1<.55*r0||w1>1.7*r0||w0<.4*r0||w0>2*r0){const dr=A.cov<B.cov?A:B;dr.c=null;dr.seen=false;dr.miss=99}}
   // فقدان كلي: نوقف ونبدأ من جديد
   const lost=!(A.c||B.c)||Math.min(A.miss,B.miss)>C.HOLD;
   if(lost){if(!wasLost){acc.fill(0);base=null;calib=[];bad=0;lastOff=null}S.forEach(s=>{s.c=null;s.rej=0});wasLost=true}
@@ -221,9 +252,14 @@ function step(){
   if(off!=null){
     if(base==null){calib.push(off);text=`يتعلم وضعك ${calib.length}/${C.CALF}`;
       if(calib.length>=C.CALF)base=calib.slice().sort((a,b)=>a-b)[calib.length>>1]}
-    else{bad=Math.abs(off-base)>C.WARN?bad+1:0;
-      if(bad>=C.WARNF){text='انحراف عن المسار!';alert=true;if(bad==C.WARNF){beep();logEvt('انحراف عن المسار')}}}}
-  else bad=0;
+    else{const dev=off-base,vel=dev-devPrev,a=Math.abs(dev),dir=dev<0?'اليمين':'اليسار';devPrev=dev;
+      $('gmark').style.left=(50-Math.max(-1,Math.min(1,dev/.5))*45)+'%';
+      if(a>C.WARN){bad++;okRun=0}else{bad=0;okRun++}
+      if(!alertOn&&bad>=C.WARNF){alertOn=true;logEvt('انحراف نحو '+dir);speak('انتبه، انحراف نحو '+dir)}
+      if(alertOn&&okRun>=8)alertOn=false;
+      if(alertOn){alert=true;text='⚠ انحراف نحو '+dir+'!';beep(1,650)}
+      else if(a>C.EARLY&&vel*dev>0){if(++earlyN>=4){text='اقتربت من خط '+dir;beep(0,1500)}}else earlyN=0}}
+  else{bad=0;alertOn=false}
   if(flash>0&&!alert){flash--;if(off!=null)text='تغيير مسار'}
   // سيارة داخل مساري؟
   vw='';dets.forEach(v=>v.inLane=false);
@@ -240,10 +276,12 @@ function step(){
   const nm=s=>!s.c?'—':(s.y>.5?'أصفر':'أبيض')+(s.cov>.8?' متصل':' متقطع');
   emerg=!!(B.c&&B.cov>.85&&B.y<=.5&&!lost);
   const sg=dets.find(v=>v.class=='stop sign'),tl=dets.find(v=>v.class=='traffic light');
-  info=`يسار: ${nm(A)} · يمين: ${nm(B)}`+(emerg?' · 🟠 خط حافة/طوارئ':'')+(limit?` · 🔴 حد السرعة ${limit}`:'')
-    +(spd!=null?` · ${spd} كم/س`:'')+(over?' · ⚠ تجاوز السرعة':'')+(sg?' · 🛑 وقوف':'')+(tl?' · 🚦 إشارة':'');
+  const chips=[`يسار: ${nm(A)}`,`يمين: ${nm(B)}`];if(emerg)chips.push('🟠 خط طوارئ');if(sg)chips.push('🛑 وقوف');if(tl)chips.push('🚦 إشارة');if(over)chips.push('⚠ تجاوز السرعة');
+  $('chips').innerHTML=chips.map(c=>`<span>${c}</span>`).join('');
+  $('spd').textContent=spd!=null?spd:'--';$('spdbox').classList.toggle('over',!!over);
+  $('limit').style.display=limit?'grid':'none';if(limit)$('limv').textContent=limit;
   setStatus(text+(vw?'  '+vw:''),alert||vw.includes('جداً'));
-  $('info').textContent=info;draw(alert,!!vw);
+  draw(alert,!!vw);
 }
 function draw(alert,warn){
   octx.clearRect(0,0,OW,OH);const A=S[0],B=S[1];
@@ -258,7 +296,7 @@ function draw(alert,warn){
     for(const t of[.2,.4,.6,.8]){const y=BH*t,m=(lxf(y)+rxf(y))/2,h=laneW*.16;   // أسهم على المسار
       octx.beginPath();[[m-h,y+8],[m,y],[m+h,y+8]].forEach(([x,yy],i)=>{const[a,b]=P(x,yy);i?octx.lineTo(a,b):octx.moveTo(a,b)});
       octx.strokeStyle=`rgba(255,255,255,${.25+.5*t})`;octx.lineWidth=2+5*t;octx.lineCap='round';octx.lineJoin='round';octx.stroke()}
-    [[A,lxf],[B,rxf]].forEach(([s,f],i)=>{
+    [[A,lxf],[B,rxf]].forEach(([s,f],i)=>{if(!s.c)return;   // ما نرسم خط وهمي
       octx.beginPath();ys.forEach((y,j)=>{const[a,b]=P(f(y),y);j?octx.lineTo(a,b):octx.moveTo(a,b)});
       const col=(emerg&&i==1)?'#fb923c':s.y>.5?'#facc15':'#f8fafc';
       octx.save();octx.setLineDash(s.c&&s.cov>.8?[]:[26,16]);octx.globalAlpha=s.c?(s.miss?.6:1):.4;
@@ -275,7 +313,38 @@ function idle(){octx.clearRect(0,0,OW,OH);octx.fillStyle='#fde047';octx.strokeSt
 function loop(){requestAnimationFrame(loop);
   if(!running||video.readyState<2)return;
   pctx.drawImage(video,0,0,PW,PH);
-  if(Hi)step();else{idle();setStatus('عايِر المسار (4 نقاط)',false)}}
+  if(Hi)step();
+  else if(auto){octx.clearRect(0,0,OW,OH);setStatus('معايرة تلقائية '+Math.min(99,Math.round(aN/14*100))+'%',false);autoStep()}
+  else{idle();setStatus('عايِر المسار (4 نقاط)',false)}}
+
+// ---------- معايرة تلقائية: نجمع تصويت خطوط (Hough) ونأخذ أقرب خطين لمركز الصورة ----------
+const AY0=Math.round(PH*.52),AY1=Math.round(PH*.88),AB0=Math.round(PW*.2),AB1=Math.round(PW*.8),AS=6,AX0=-Math.round(PW*.3),
+  ANB=Math.ceil((AB1-AB0)/AS)+1,ANN=Math.ceil(PW*1.6/AS)+1,ah=new Int32Array(ANB*ANN),macc=new Uint8Array(PW*PH);
+let aN=0,aFr=0;
+function autoStep(){aFr++;if(aFr%3)return;const d=pctx.getImageData(0,0,PW,PH).data;
+  yF=AY0;yN=AY1;makeMask(d,1);aN++;
+  for(let y=AY0+6;y<AY1;y+=2)for(let x=0;x<PW;x+=2){const o=y*PW+x;if(!mask[o])continue;if(macc[o]<250)macc[o]++;
+    for(let bi=0;bi<ANB;bi++){const b=AB0+bi*AS,ni=Math.round((b+(x-b)*(AY1-AY0)/(y-AY0)-AX0)/AS);if(ni>=0&&ni<ANN)ah[bi*ANN+ni]++}}
+  if(aN>=14)finishAuto()}
+function finishAuto(){let mL=0,mR=0,bl=null,br=null;
+  const cell=(bi,ni)=>[AB0+bi*AS,AX0+ni*AS,ah[bi*ANN+ni]];
+  for(let bi=0;bi<ANB;bi++)for(let ni=0;ni<ANN;ni++){const[b,xn,v]=cell(bi,ni);
+    if(xn<b-10&&xn<PW*.5)mL=Math.max(mL,v);else if(xn>b+10&&xn>PW*.5)mR=Math.max(mR,v)}
+  for(let bi=0;bi<ANB;bi++)for(let ni=0;ni<ANN;ni++){const[b,xn,v]=cell(bi,ni);
+    if(mL>25&&xn<b-10&&xn<PW*.5&&v>=.5*mL&&(!bl||xn>bl.xn))bl={b,xn};
+    if(mR>25&&xn>b+10&&xn>PW*.5&&v>=.5*mR&&(!br||xn<br.xn))br={b,xn}}
+  const fail=()=>{if(aN>=40){auto=false;resetCalib();$('msg').textContent='ما قدرت أعاير تلقائياً. عايِر يدوياً (4 نقاط).'}};
+  if(!bl||!br)return fail();
+  const den=(br.xn-br.b)-(bl.xn-bl.b),w0=br.b-bl.b,vpy=AY0+(-w0/den)*(AY1-AY0);
+  if(den<=0||vpy<PH*.15||vpy>AY0-4||br.xn-bl.xn<PW*.22||br.xn-bl.xn>PW*.9)return fail();
+  const lx=y=>bl.b+(bl.xn-bl.b)*(y-AY0)/(AY1-AY0),rx=y=>br.b+(br.xn-br.b)*(y-AY0)/(AY1-AY0);
+  const sup=new Float32Array(PH);   // أين تنتهي الخطوط من تحت؟ (الكبوت)
+  for(let y=AY0;y<AY1;y++){let c=0;for(const x0 of[lx(y),rx(y)])for(let x=Math.round(x0)-3;x<=Math.round(x0)+3;x++)if(x>=0&&x<PW&&macc[y*PW+x]>2)c++;sup[y]=c}
+  let yn=AY0+10;for(let y=AY1-1;y>AY0+10;y--){let t=0;for(let k=0;k<6;k++)t+=sup[y-k];if(t>=4){yn=y-4;break}}
+  const yf=Math.round(vpy+.5*(yn-vpy));if(yn-yf<25)return fail();
+  const p=[[lx(yf),yf],[rx(yf),yf],[rx(yn),yn],[lx(yn),yn]];
+  if(p.some(([x,y])=>x<0||x>PW||y<0||y>PH))return fail();
+  localStorage.setItem(calKey,JSON.stringify(p));setCalib(p);$('msg').textContent='تمت المعايرة تلقائياً.'}
 
 // ---------- مصادر الفيديو ----------
 function stopSrc(){video.pause();const s=video.srcObject;if(s)s.getTracks().forEach(t=>t.stop());
@@ -286,7 +355,7 @@ function loadCal(){const saved=localStorage.getItem(calKey);
 $('start').onclick=async()=>{
   try{actx=actx||new (window.AudioContext||window.webkitAudioContext)();stopSrc();src='cam';calKey='pts-cam';
     const s=await navigator.mediaDevices.getUserMedia({video:{facingMode:{ideal:'environment'},width:{ideal:1280},height:{ideal:720}},audio:false});
-    video.loop=false;video.srcObject=s;await video.play();running=true;$('pp').style.display='none';
+    video.loop=false;video.srcObject=s;await video.play();running=true;$('pp').style.display='none';$('intro').style.display='none';
     $('stage').style.aspectRatio='16/9';initModel();
     try{await navigator.wakeLock.request('screen')}catch(e){}
     try{gpsId=navigator.geolocation.watchPosition(p=>{spd=p.coords.speed!=null?Math.round(p.coords.speed*3.6):null},()=>{},{enableHighAccuracy:true})}catch(e){}
@@ -294,11 +363,13 @@ $('start').onclick=async()=>{
   }catch(e){$('msg').textContent='ما اشتغلت الكاميرا: '+e.message+' (لازم https وإذن الكاميرا)'}};
 $('file').onchange=e=>{const f=e.target.files[0];if(!f)return;
   actx=actx||new (window.AudioContext||window.webkitAudioContext)();stopSrc();src='file';calKey='pts-file-'+f.name;
-  video.muted=true;video.loop=true;video.src=URL.createObjectURL(f);running=true;$('pp').style.display='';
+  video.muted=true;video.loop=true;video.src=URL.createObjectURL(f);running=true;$('pp').style.display='';$('intro').style.display='none';
   video.onloadedmetadata=()=>{$('stage').style.aspectRatio=video.videoWidth/video.videoHeight;video.currentTime=.5;
-    if(loadCal())video.play();else video.pause()};initModel()};
+    if(loadCal()||auto)video.play();else video.pause()};initModel()};
 $('pp').onclick=()=>video.paused?video.play():video.pause();
-$('cal').onclick=()=>{if(running){resetCalib();if(src=='file')video.pause()}};
+$('cal').onclick=()=>{if(running){auto=true;resetCalib()}};
+$('man').onclick=()=>{if(running){auto=false;resetCalib();if(src=='file')video.pause()}};
+$('cam').onclick=$('start').onclick;
 $('logb').onclick=()=>{const b=$('log');b.style.display=b.style.display=='block'?'none':'block';showLog()};
 $('dbg').onclick=()=>{showBev=!showBev;bevC.style.display=showBev?'block':'none'};
 bevC.style.display='none';
