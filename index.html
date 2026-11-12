@@ -68,10 +68,11 @@ button.main{background:linear-gradient(135deg,#2563eb,#38bdf8);border:0;font-wei
 <div id="dock">
   <button id="cam">كاميرا</button><label class="btn" for="file">فيديو</label><input id="file" type="file" accept="video/*" hidden>
   <button id="cal">معايرة تلقائية</button><button id="man">معايرة يدوية</button>
-  <button id="pp" style="display:none">إيقاف/تشغيل</button><button id="logb">السجل</button><button id="dbg">المنظور</button>
+  <button id="pp" style="display:none">إيقاف/تشغيل</button><button id="mlf">موديل من ملف</button><input id="mlfile" type="file" accept=".onnx" hidden><button id="mlu">موديل من رابط</button><button id="mlt">🧠 الذكاء</button>
+  <button id="logb">السجل</button><button id="dbg">المنظور</button>
 </div>
 <script>
-const C={PW:480,PH:270,BW:180,BH:150,P:91,MINL:110,SM:.25,MISS:12,HOLD:12,CAR:350,EARLY:.15,WARN:.22,WARNF:6,CALF:45};
+const C={PW:480,PH:270,BW:180,BH:150,P:91,MINL:110,SM:.25,MISS:12,HOLD:12,CAR:350,EARLY:.15,WARN:.22,WARNF:6,CALF:45,NEAR:.8};
 const {PW,PH,BW,BH}=C, OW=960, OH=540, K=OW/PW, VEH=new Set(['car','truck','bus','motorcycle']);
 const $=id=>document.getElementById(id);
 const video=$('video'),ov=$('ov'),octx=ov.getContext('2d');
@@ -123,7 +124,7 @@ ov.addEventListener('pointerdown',e=>{if(Hi||!running||auto)return;
     else{pts=[];$('msg').textContent='الترتيب غلط: النقاط البعيدة لازم تكون أعلى. أعد المحاولة.'}}});
 
 // ---------- كاشف السيارات (COCO-SSD) ----------
-function initModel(){if(modelP)return;modelP=(async()=>{try{
+function initModel(){initML();if(modelP)return;modelP=(async()=>{try{
   await loadScript('https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.22.0/dist/tf.min.js');
   await loadScript('https://cdn.jsdelivr.net/npm/@tensorflow-models/coco-ssd@2.2.3/dist/coco-ssd.min.js');
   model=await cocoSsd.load({base:'lite_mobilenet_v2'})}catch(e){$('msg').textContent='تعذر تحميل كاشف السيارات (يحتاج نت أول مرة).'}})()}
@@ -131,6 +132,58 @@ const iou=(a,b)=>{const x=Math.max(0,Math.min(a[0]+a[2],b[0]+b[2])-Math.max(a[0]
 function runDet(){if(!model||detBusy)return;detBusy=true;
   model.detect(pc,12,.45).then(r=>{r.forEach(x=>x.t=fn);   // نحتفظ بالمربعات القديمة 10 فريمات عشان السيارة السريعة
     dets=r.concat(dets.filter(o=>fn-o.t<10&&!r.some(n=>n.class==o.class&&iou(n.bbox,o.bbox)>.2)))}).catch(()=>{}).finally(()=>detBusy=false)}
+
+// ---------- موديل مسارات (UFLD v1 عبر ONNX Runtime Web) ----------
+const ml={sess:null,on:false,busy:false,lanes:null,pick:null,t:0,ms:0,si:0,fails:0,err:''},ML_SIZES=[[288,800],[200,800],[320,800],[320,1600]];
+const mc=document.createElement('canvas'),mctx=mc.getContext('2d',{willReadFrequently:true});
+const idb=()=>new Promise((ok,no)=>{const r=indexedDB.open('lane',1);r.onupgradeneeded=()=>r.result.createObjectStore('m');r.onsuccess=()=>ok(r.result);r.onerror=no});
+const idbGet=async k=>{const d=await idb();return new Promise(ok=>{const q=d.transaction('m').objectStore('m').get(k);q.onsuccess=()=>ok(q.result)})};
+const idbSet=async(k,v)=>{const d=await idb();return new Promise(ok=>{const t=d.transaction('m','readwrite');t.objectStore('m').put(v,k);t.oncomplete=ok})};
+let mlInit=false,mlLastT=-1;const mlAcc=[];
+function initML(){if(mlInit)return;mlInit=true;idbGet('ufld').then(b=>b&&loadML(b)).catch(()=>{})}
+async function loadML(buf){try{
+  if(typeof ort==='undefined')await loadScript('https://cdn.jsdelivr.net/npm/onnxruntime-web@1.18.0/dist/ort.min.js');
+  ort.env.wasm.wasmPaths='https://cdn.jsdelivr.net/npm/onnxruntime-web@1.18.0/dist/';ort.env.wasm.numThreads=1;
+  ml.sess=await ort.InferenceSession.create(buf,{executionProviders:['wasm']});ml.on=true;ml.fails=0;ml.pick=null;
+  $('msg').textContent='موديل الذكاء جاهز.'}catch(e){ml.sess=null;$('msg').textContent='تعذر تحميل الموديل: '+String(e.message||e).slice(0,80)}}
+function decodeUFLD(d,dims){const n=dims.length,G1=dims[n-3],R=dims[n-2],L=dims[n-1],G=G1-1,cw=799/(G-1),lanes=[];
+  const anc=R==56?[...Array(56)].map((_,k)=>64+4*k):R==18?[121,131,141,151,161,171,181,191,201,211,221,231,241,251,261,271,281,287]
+    :[...Array(R)].map((_,r)=>Math.round(288*(.4+.6*r/(R-1))));
+  for(let l=0;l<L;l++){const pts=[];
+    for(let r=0;r<R;r++){let mx=-1e9,am=0;for(let g=0;g<G1;g++){const v=d[(g*R+r)*L+l];if(v>mx){mx=v;am=g}}
+      if(am==G)continue;let sm=0,e=0;for(let g=0;g<G;g++){const p=Math.exp(d[(g*R+r)*L+l]-mx);sm+=p;e+=p*(g+1)}
+      pts.push([e/sm*cw*PW/800-1,PH*anc[r]/288-1])}
+    lanes.push(pts.length>2?pts:null)}
+  return lanes}
+function mlPick(lanes){let Lp=null,Rp=null,lx=-1e9,rx=1e9;      // أقرب خطين لمركز الصورة = مسارك
+  for(const p of lanes){if(!p)continue;const[,a,b]=polyfit(p.map(q=>q[1]),p.map(q=>q[0]),1),x=a*PH*C.NEAR+b;
+    if(x<PW/2-8&&x>lx){lx=x;Lp=p}if(x>PW/2+8&&x<rx){rx=x;Rp=p}}
+  return{L:Lp,R:Rp}}
+async function runML(){if(!ml.sess||!ml.on||ml.busy)return;ml.busy=true;const t0=performance.now();
+  try{const[H,W]=ML_SIZES[ml.si];mc.width=W;mc.height=H;mctx.drawImage(video,0,0,W,H);
+    const px=mctx.getImageData(0,0,W,H).data,n=W*H,f=new Float32Array(3*n);
+    for(let i=0;i<n;i++){f[i]=(px[i*4]/255-.485)/.229;f[n+i]=(px[i*4+1]/255-.456)/.224;f[2*n+i]=(px[i*4+2]/255-.406)/.225}
+    const out=await ml.sess.run({[ml.sess.inputNames[0]]:new ort.Tensor('float32',f,[1,3,H,W])}),t=out[ml.sess.outputNames[0]];
+    ml.lanes=decodeUFLD(t.data,t.dims);ml.pick=mlPick(ml.lanes);ml.t=performance.now();ml.ms=Math.round(ml.t-t0);ml.fails=0}
+  catch(e){ml.err=String(e.message||e).slice(0,80);ml.si=(ml.si+1)%ML_SIZES.length;
+    if(++ml.fails>=8){ml.on=false;$('msg').textContent='الموديل ما اشتغل ('+ml.err+'). رجعت للكشف التقليدي.'}}
+  ml.busy=false}
+const mlFresh=()=>ml.sess&&ml.on&&ml.pick&&performance.now()-ml.t<1500;
+function mlLine(i){const p=ml.pick&&(i?ml.pick.R:ml.pick.L);if(!p)return null;const bx=[],by=[];
+  for(const[x,y]of p){if(y<yF||y>yN)continue;const[u,v]=apply(Hf,x,y);if(v>=0&&v<=BH&&u>-BW&&u<2*BW){bx.push(u);by.push(v)}}
+  if(bx.length<5)return null;const c=polyfit(by,bx,bx.length>=7?2:1);
+  if(Math.abs(c[0])>3e-3||Math.abs(c[1])>.9||Math.abs(2*c[0]*BH+c[1])>.9)return null;
+  return{c,cov:.5,y:0,ml:true}}
+function mlCalStep(){if(!ml.pick||ml.t===mlLastT)return;mlLastT=ml.t;
+  const fit=p=>{const[,a,b]=polyfit(p.map(q=>q[1]),p.map(q=>q[0]),1);return[a,b]};
+  if(ml.pick.L&&ml.pick.R)mlAcc.push([...fit(ml.pick.L),...fit(ml.pick.R),Math.max(...ml.pick.L.map(q=>q[1]),...ml.pick.R.map(q=>q[1]))]);
+  if(mlAcc.length<6)return;
+  const med=k=>mlAcc.map(r=>r[k]).sort((p,q)=>p-q)[mlAcc.length>>1];
+  const[aL,bL,aR,bR,low]=[0,1,2,3,4].map(med);mlAcc.length=0;
+  const vpy=(bR-bL)/(aL-aR),yn=Math.min(low,PH*C.NEAR),yf=vpy+.5*(yn-vpy),lx=y=>aL*y+bL,rx=y=>aR*y+bR;
+  const p=[[lx(yf),yf],[rx(yf),yf],[rx(yn),yn],[lx(yn),yn]];
+  if(!(aR>aL)||vpy<PH*.15||vpy>yn-30||rx(yn)-lx(yn)<PW*.22||rx(yn)-lx(yn)>PW*.9||p.some(([x,y])=>x<0||x>PW||y<0||y>PH))return;
+  localStorage.setItem(calKey,JSON.stringify(p));setCalib(p);$('msg').textContent='تمت المعايرة بالذكاء الاصطناعي.'}
 
 // ---------- لوحات السرعة ----------
 const cropC=document.createElement('canvas');cropC.width=cropC.height=96;
@@ -230,9 +283,9 @@ function step(){
   makeMask(d,relax);const[cLp,cRp]=makeBev();
   const cars=[cLp>C.CAR,cRp>C.CAR],mid=BW/2;
   for(const i of[0,1]){const s=S[i];s.car=cars[i]?s.car+1:0;const frz=s.car>0&&s.car<=40;
-    const r=frz?null:findLine(i?mid:0,i?BW:mid,s.c?xat(s.c,BH):null,relax);
+    const r=frz?null:(mlFresh()?mlLine(i):findLine(i?mid:0,i?BW:mid,s.c?xat(s.c,BH):null,relax));
     const n=accept(s.c,r&&r.c,s.rej);s.rej=(r&&!n)?s.rej+1:0;
-    if(n){s.c=blend(s.c,n);s.miss=0;s.cov=.8*s.cov+.2*r.cov;s.y=.8*s.y+.2*r.y;s.seen=true}
+    if(n){s.c=blend(s.c,n);s.miss=0;s.cov=.8*s.cov+.2*r.cov;s.y=.8*s.y+.2*r.y;s.seen=true;s.ml=!!r.ml}
     else{s.seen=false;if(!frz&&++s.miss>C.MISS)s.c=null}s.frz=frz}
   const A=S[0],B=S[1];
   if(A.c&&B.c){const w0=xat(B.c,0)-xat(A.c,0),w1=xat(B.c,BH)-xat(A.c,BH),r0=BW/3;   // الخطين لازم يكوّنون مسار منطقي
@@ -274,9 +327,9 @@ function step(){
   const over=limit&&spd!=null&&spd>limit+5;if(over){beep();if(!S.over){logEvt('تجاوز السرعة '+spd+'/'+limit)}}S.over=over;
   // معلومات الخطوط
   const nm=s=>!s.c?'—':(s.y>.5?'أصفر':'أبيض')+(s.cov>.8?' متصل':' متقطع');
-  emerg=!!(B.c&&B.cov>.85&&B.y<=.5&&!lost);
+  emerg=!!(B.c&&B.cov>.85&&B.y<=.5&&!B.ml&&!lost);
   const sg=dets.find(v=>v.class=='stop sign'),tl=dets.find(v=>v.class=='traffic light');
-  const chips=[`يسار: ${nm(A)}`,`يمين: ${nm(B)}`];if(emerg)chips.push('🟠 خط طوارئ');if(sg)chips.push('🛑 وقوف');if(tl)chips.push('🚦 إشارة');if(over)chips.push('⚠ تجاوز السرعة');
+  const chips=mlFresh()?['🧠 ذكاء '+ml.ms+'ms']:[`يسار: ${nm(A)}`,`يمين: ${nm(B)}`];if(emerg)chips.push('🟠 خط طوارئ');if(sg)chips.push('🛑 وقوف');if(tl)chips.push('🚦 إشارة');if(over)chips.push('⚠ تجاوز السرعة');
   $('chips').innerHTML=chips.map(c=>`<span>${c}</span>`).join('');
   $('spd').textContent=spd!=null?spd:'--';$('spdbox').classList.toggle('over',!!over);
   $('limit').style.display=limit?'grid':'none';if(limit)$('limv').textContent=limit;
@@ -299,7 +352,7 @@ function draw(alert,warn){
     [[A,lxf],[B,rxf]].forEach(([s,f],i)=>{if(!s.c)return;   // ما نرسم خط وهمي
       octx.beginPath();ys.forEach((y,j)=>{const[a,b]=P(f(y),y);j?octx.lineTo(a,b):octx.moveTo(a,b)});
       const col=(emerg&&i==1)?'#fb923c':s.y>.5?'#facc15':'#f8fafc';
-      octx.save();octx.setLineDash(s.c&&s.cov>.8?[]:[26,16]);octx.globalAlpha=s.c?(s.miss?.6:1):.4;
+      octx.save();octx.setLineDash(s.c&&(s.cov>.8||s.ml)?[]:[26,16]);octx.globalAlpha=s.c?(s.miss?.6:1):.4;
       octx.shadowColor=col;octx.shadowBlur=14;octx.strokeStyle=col;octx.lineWidth=6;octx.stroke();octx.restore()})}
   for(const v of dets){if(!VEH.has(v.class))continue;const[x,y,w,h]=v.bbox;
     octx.strokeStyle=v.inLane?'#fb923c':'rgba(255,255,255,.55)';octx.lineWidth=v.inLane?5:2;octx.strokeRect(x*K,y*K,w*K,h*K)}
@@ -312,9 +365,9 @@ function idle(){octx.clearRect(0,0,OW,OH);octx.fillStyle='#fde047';octx.strokeSt
   pts.forEach(([x,y])=>{octx.beginPath();octx.arc(x*K,y*K,8,0,7);octx.fill()})}
 function loop(){requestAnimationFrame(loop);
   if(!running||video.readyState<2)return;
-  pctx.drawImage(video,0,0,PW,PH);
+  pctx.drawImage(video,0,0,PW,PH);runML();
   if(Hi)step();
-  else if(auto){octx.clearRect(0,0,OW,OH);setStatus('معايرة تلقائية '+Math.min(99,Math.round(aN/14*100))+'%',false);autoStep()}
+  else if(auto){octx.clearRect(0,0,OW,OH);setStatus('معايرة تلقائية '+Math.min(99,Math.round(aN/14*100))+'%',false);(ml.sess&&ml.on)?mlCalStep():autoStep()}
   else{idle();setStatus('عايِر المسار (4 نقاط)',false)}}
 
 // ---------- معايرة تلقائية: نجمع تصويت خطوط (Hough) ونأخذ أقرب خطين لمركز الصورة ----------
@@ -370,6 +423,13 @@ $('pp').onclick=()=>video.paused?video.play():video.pause();
 $('cal').onclick=()=>{if(running){auto=true;resetCalib()}};
 $('man').onclick=()=>{if(running){auto=false;resetCalib();if(src=='file')video.pause()}};
 $('cam').onclick=$('start').onclick;
+$('mlf').onclick=()=>$('mlfile').click();
+$('mlfile').onchange=async e=>{const f=e.target.files[0];if(!f)return;$('msg').textContent='جاري قراءة الموديل…';
+  const b=await f.arrayBuffer();try{await idbSet('ufld',b)}catch(x){}loadML(b)};
+$('mlu').onclick=async()=>{const u=prompt('رابط ملف ONNX (UFLD v1)');if(!u)return;
+  try{$('msg').textContent='جاري تنزيل الموديل…';const b=await(await fetch(u)).arrayBuffer();try{await idbSet('ufld',b)}catch(x){}loadML(b)}
+  catch(x){$('msg').textContent='فشل التنزيل: '+x.message}};
+$('mlt').onclick=()=>{ml.on=!ml.on&&!!ml.sess;$('msg').textContent=ml.on?'الذكاء مفعّل.':'الذكاء متوقف، الكشف التقليدي شغال.'};
 $('logb').onclick=()=>{const b=$('log');b.style.display=b.style.display=='block'?'none':'block';showLog()};
 $('dbg').onclick=()=>{showBev=!showBev;bevC.style.display=showBev?'block':'none'};
 bevC.style.display='none';
