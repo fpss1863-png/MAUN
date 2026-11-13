@@ -16,3 +16,13 @@
 
 ## التراخيص
 COCO-SSD وTensorFlow.js وTesseract.js وONNX Runtime: Apache-2.0 / MIT. لم أستخدم YOLO من Ultralytics لأن رخصته AGPL-3.0 وتحتاج ترخيصاً تجارياً لمشروع مغلق.
+
+## YOLO (اختياري)
+على الكمبيوتر (مرة وحدة):
+    pip install ultralytics
+    yolo export model=yolo11n.pt format=onnx imgsz=640 opset=12 simplify=True
+انقل الملف `yolo11n.onnx` للجوال، ثم الإعدادات ← YOLO ← «موديل من ملف».
+ضبط «حجم المدخل» ليطابق imgsz. للسرعة على الآيفون جرّب imgsz=320.
+لموديل مدرَّب على لوحاتك: اكتب أسماء الفئات بنفس ترتيب التدريب، وأي فئة اسمها فيه speed أو limit تُقرأ أرقامها تلقائياً.
+مدعوم: YOLOv8 وYOLO11 (مخرجات [1,4+nc,N])، والمخرجات بدون NMS [1,N,6]. غير مدعوم: YOLOv5.
+الرخصة: AGPL-3.0، ولا تُطبَّق التزاماتها طالما المشروع خاص لك وحدك.

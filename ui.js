@@ -13,7 +13,7 @@ const fileToDataURL=(f,max=640)=>new Promise((ok,no)=>{const im=new Image(),u=UR
 // ============ الإعدادات (كل خيار يوقف المعالجة فعلياً) ============
 const DEF={lanes:1,showLanes:1,curves:1,cars:1,approach:1,cutin:1,leadmove:1,showSpeed:1,speedSign:1,signs:1,showSigns:1,overspeed:1,
   radar:0,radarDist:500,sound:1,visual:1,vol:.7,sens:'mid',tInfo:'chime',tWarn:'soft',tDanger:'low',gaugeStyle:'ring',gaugeSize:'m',
-  camId:'',camH:720,camFps:30,procFps:30,showFps:0,showConf:1,fov:65};
+  yolo:1,yoloSize:640,yoloConf:.4,yoloNames:'',camId:'',camH:720,camFps:30,procFps:30,showFps:0,showConf:1,fov:65};
 const ST=Object.assign({},DEF);
 Object.defineProperty(ST,'detect',{get(){return !!(this.cars||this.signs)}});
 window.SENSF=()=>({low:1.25,mid:1,high:.8}[ST.sens]||1);
@@ -128,6 +128,46 @@ const Assist={tr:[],nid:1,lead:null,leadM:null,dark:false,stopSince:0,armed:fals
         c.fillStyle='rgba(8,9,10,.7)';rr(c,L.x*k,L.y*k-28,w,24,12);c.fill();c.fillStyle='#e9ebee';c.fillText(lab,L.x*k+9,L.y*k-11)}}}};
 window.Assist=Assist;window.Radar=Radar;
 
+
+// ============ YOLO (ONNX Runtime Web) — يُحمَّل من ملف .onnx تصدّره بنفسك ============
+const ORT_BASE='https://cdn.jsdelivr.net/npm/onnxruntime-web@1.18.0/dist/';
+const COCO=['person','bicycle','car','motorcycle','airplane','bus','train','truck','boat','traffic light','fire hydrant','stop sign','parking meter','bench','bird','cat','dog','horse','sheep','cow','elephant','bear','zebra','giraffe','backpack','umbrella','handbag','tie','suitcase','frisbee','skis','snowboard','sports ball','kite','baseball bat','baseball glove','skateboard','surfboard','tennis racket','bottle','wine glass','cup','fork','knife','spoon','bowl','banana','apple','sandwich','orange','broccoli','carrot','hot dog','pizza','donut','cake','chair','couch','potted plant','bed','dining table','toilet','tv','laptop','mouse','remote','keyboard','cell phone','microwave','oven','toaster','sink','refrigerator','book','clock','vase','scissors','teddy bear','hair drier','toothbrush'];
+const Yolo={sess:null,busy:false,ms:0,layout:'',nc:0,err:'',fails:0,lastOcr:0,_i:0,
+  names(){const t=(ST.yoloNames||'').trim();return t?t.split(/[,\n]+/).map(s=>s.trim()).filter(Boolean):COCO},
+  active(){return !!(this.sess&&ST.yolo&&ST.detect)},
+  init(){if(this._i)return;this._i=1;idbGet('yolo').then(b=>b&&this.load(b)).catch(()=>{})},
+  async load(buf){try{if(typeof ort==='undefined')await loadScript(ORT_BASE+'ort.min.js');ort.env.wasm.wasmPaths=ORT_BASE;ort.env.wasm.numThreads=1;
+      this.sess=await ort.InferenceSession.create(buf,{executionProviders:['wasm']});this.fails=0;$('msg').textContent='موديل YOLO جاهز.';if(window.UI)UI.tick()}
+    catch(e){this.sess=null;$('msg').textContent='تعذر تحميل YOLO: '+String(e.message||e).slice(0,80)}},
+  async run(){if(this.busy||video.readyState<2||!video.videoWidth)return;this.busy=true;const t0=performance.now();
+    try{const S=ST.yoloSize,c=this.cv||(this.cv=el('canvas'));c.width=c.height=S;const x=this.cx||(this.cx=c.getContext('2d',{willReadFrequently:true}));
+      const vw=video.videoWidth,vh=video.videoHeight,r=Math.min(S/vw,S/vh),nw=Math.round(vw*r),nh=Math.round(vh*r),px=(S-nw)>>1,py=(S-nh)>>1;
+      x.fillStyle='#727272';x.fillRect(0,0,S,S);x.drawImage(video,px,py,nw,nh);                 // letterbox بنفس طريقة Ultralytics
+      const d=x.getImageData(0,0,S,S).data,n=S*S,f=new Float32Array(3*n);
+      for(let i=0;i<n;i++){f[i]=d[i*4]/255;f[n+i]=d[i*4+1]/255;f[2*n+i]=d[i*4+2]/255}
+      const out=await this.sess.run({[this.sess.inputNames[0]]:new ort.Tensor('float32',f,[1,3,S,S])}),t=out[this.sess.outputNames[0]];
+      this.post(this.decode(t.data,t.dims,{r,px,py,vw}));this.ms=Math.round(performance.now()-t0);this.err='';this.fails=0}
+    catch(e){this.err=String(e.message||e).slice(0,70);const L=[640,480,416,320];ST.yoloSize=L[(L.indexOf(ST.yoloSize)+1)%4];   // غالباً حجم المدخل غلط: نجرّب غيره
+      if(++this.fails>=8){ST.yolo=0;saveST();$('msg').textContent='YOLO ما اشتغل ('+this.err+'). رجعت لـ COCO-SSD.';renderSettings();initModel()}}
+    this.busy=false},
+  decode(d,dims,g){const nm=this.names(),cf=ST.yoloConf,out=[],k=PW/g.vw,box=(x1,y1,x2,y2)=>[(x1-g.px)/g.r*k,(y1-g.py)/g.r*k,(x2-x1)/g.r*k,(y2-y1)/g.r*k],n=dims.length,a=dims[n-2],b=dims[n-1];
+    if(b===6&&a<=2000){this.layout='end2end';                      // مخرجات بدون NMS: [x1,y1,x2,y2,score,class]
+      for(let i=0;i<a;i++){const o=i*6,sc=d[o+4];if(sc<cf)continue;const c=d[o+5]|0;out.push({class:nm[c]||'cls'+c,score:sc,bbox:box(d[o],d[o+1],d[o+2],d[o+3])})}return out}
+    const feat=a<b,C=feat?a:b,A=feat?b:a,nc=C-4;this.layout=feat?'v8':'v8-T';this.nc=nc;        // [4+nc, anchors] (YOLOv8/11)
+    const at=(c,i)=>feat?d[c*A+i]:d[i*C+c],cand=[];
+    for(let i=0;i<A;i++){let best=0,bc=-1;for(let c=0;c<nc;c++){const s=at(4+c,i);if(s>best){best=s;bc=c}}
+      if(best<cf)continue;const cx=at(0,i),cy=at(1,i),w=at(2,i),h=at(3,i);cand.push({bc,best,x1:cx-w/2,y1:cy-h/2,x2:cx+w/2,y2:cy+h/2})}
+    cand.sort((p,q)=>q.best-p.best);const keep=[];
+    for(const c of cand){if(keep.length>=60)break;let ok=true;
+      for(const q of keep){if(q.bc!==c.bc)continue;const ix=Math.max(0,Math.min(q.x2,c.x2)-Math.max(q.x1,c.x1)),iy=Math.max(0,Math.min(q.y2,c.y2)-Math.max(q.y1,c.y1)),i=ix*iy,u=(q.x2-q.x1)*(q.y2-q.y1)+(c.x2-c.x1)*(c.y2-c.y1)-i;if(i/u>.5){ok=false;break}}
+      if(ok)keep.push(c)}
+    for(const c of keep)out.push({class:nm[c.bc]||'cls'+c.bc,score:c.best,bbox:box(c.x1,c.y1,c.x2,c.y2)});return out},
+  post(r){r.forEach(x=>x.t=fn);Assist.onDet(r);
+    dets=r.concat(dets.filter(o=>fn-o.t<10&&!r.some(n=>n.class==o.class&&iou(n.bbox,o.bbox)>.2)));
+    if(ST.speedSign&&!ocrBusy&&performance.now()-this.lastOcr>800){const s=r.find(x=>/speed|limit|سرعة/i.test(x.class));   // لوحة سرعة مكتشفة → نقرأ رقمها
+      if(s){this.lastOcr=performance.now();const[x,y,w,h]=s.bbox;ocr({x,y,w,h})}}}};
+window.Yolo=Yolo;
+
 // وضع بدون تحليل المسارات: يبقى عداد السرعة واللوحات والسيارات
 function stepLite(){fn++;if(ST.detect)runDet();
   if(ST.speedSign&&fn%6==0&&!ocrBusy){const b=findSign(pctx.getImageData(0,0,PW,PH).data);if(b)ocr(b)}
@@ -146,7 +186,8 @@ const UI={_k:'',
     if(ST.showFps)L.push(`${fpsV} إطار/ث`+(ml.on&&ml.sess?` · ذكاء ${ml.ms}م.ث`:''));
     if(ST.showConf){if(ST.lanes)L.push(`ثقة المسار ${Math.round(lc*100)}%`);if(Assist.leadM)L.push('ثقة المسافة: '+Assist.leadM.conf)}
     const av=Assist.avail();if(av)L.push(av);if(ST.radar&&Radar.near)L.push(`أقرب رادار: ${Radar.near.d<1000?Math.round(Radar.near.d)+' م':(Radar.near.d/1000).toFixed(1)+' كم'}`);
-    $('hudinfo').innerHTML=L.map(esc).join('<br>');const c=$('calstat');if(c)c.textContent=Hi?`معايرة سارية — ثقة المسار ${Math.round(lc*100)}%`:'غير معايَر'}};
+    if(ST.showFps&&ST.detect)L.push(Yolo.active()?`YOLO ${Yolo.ms}م.ث · ${Yolo.layout}`:(model?'COCO-SSD':'كاشف الأجسام غير جاهز'));
+    $('hudinfo').innerHTML=L.map(esc).join('<br>');const ys=$('yolostat');if(ys)ys.textContent=Yolo.sess?`محمّل · ${Yolo.layout||'—'} · ${Yolo.nc||'?'} فئة · ${Yolo.ms}م.ث`+(Yolo.err?' · '+Yolo.err:''):'لا يوجد موديل YOLO محمّل.';const c=$('calstat');if(c)c.textContent=Hi?`معايرة سارية — ثقة المسار ${Math.round(lc*100)}%`:'غير معايَر'}};
 window.UI=UI;
 
 function applyST(){const s=$('stage');s.dataset.gauge=ST.gaugeStyle;s.dataset.size=ST.gaugeSize;$('gaugeBox').style.display=ST.showSpeed?'':'none';
@@ -180,6 +221,14 @@ const SCHEMA=[
      navigator.mediaDevices&&navigator.mediaDevices.enumerateDevices().then(a=>{a.filter(d=>d.kind==='videoinput').forEach((d,i)=>sel.add(new Option(d.label||'كاميرا '+(i+1),d.deviceId)));sel.value=ST.camId}).catch(()=>{});
      const s=el('div','note');s.id='calstat';s.textContent=Hi?'معايرة سارية':'غير معايَر';const bw=el('div','tools-grid'),ba=el('button','','معايرة تلقائية'),bm=el('button','','معايرة يدوية');
      ba.onclick=()=>{$('cal').click();openSheet(false)};bm.onclick=()=>{$('man').click();openSheet(false)};bw.append(ba,bm);w.append(r,s,bw);return w}},
+ {t:'YOLO',items:[['yolo','toggle','استخدام YOLO بدل COCO-SSD'],['yoloSize','select','حجم المدخل (نفس imgsz عند التصدير)',[[320,'320'],[416,'416'],[480,'480'],[640,'640']]],['yoloConf','select','حد الثقة',[[.25,'0.25'],[.35,'0.35'],[.45,'0.45'],[.55,'0.55']]]],
+   extra:()=>{const w=el('div'),g=el('div','tools-grid'),f=el('input'),bf=el('button','','موديل من ملف'),bu=el('button','','موديل من رابط'),bd=el('button','','حذف الموديل'),st=el('div','note'),ta=el('textarea');
+     f.type='file';f.accept='.onnx';f.hidden=true;st.id='yolostat';ta.placeholder='أسماء الفئات مفصولة بفاصلة (اتركها فاضية لـ COCO). مثال: car,truck,bus,speed limit';ta.value=ST.yoloNames;ta.style.cssText='width:calc(100% - 36px);margin:0 18px 8px;min-height:60px;background:var(--p2);border:1px solid var(--line);border-radius:10px;padding:8px;font-size:12px;direction:ltr;color:var(--tx)';
+     ta.onchange=()=>{ST.yoloNames=ta.value;changed('yoloNames')};
+     bf.onclick=()=>f.click();f.onchange=async()=>{const x=f.files[0];if(!x)return;$('msg').textContent='جاري قراءة الموديل…';const b=await x.arrayBuffer();try{await idbSet('yolo',b)}catch(e){}Yolo.load(b)};
+     bu.onclick=async()=>{const u=prompt('رابط ملف ONNX (YOLOv8/11)');if(!u)return;try{$('msg').textContent='جاري التنزيل…';const b=await(await fetch(u)).arrayBuffer();try{await idbSet('yolo',b)}catch(e){}Yolo.load(b)}catch(e){$('msg').textContent='فشل التنزيل: '+e.message}};
+     bd.onclick=()=>{Yolo.sess=null;try{idbSet('yolo',null)}catch(e){}$('msg').textContent='تم حذف موديل YOLO. رجعت لـ COCO-SSD.';if(ST.detect)initModel()};
+     g.append(bf,bu,bd);st.textContent='لا يوجد موديل YOLO محمّل.';w.append(g,f,ta,st);return w}},
  {t:'الذكاء والأداء',items:[['showFps','toggle','عرض FPS'],['showConf','toggle','عرض الدقة والثقة']]}];
 const TOOLS=$('tools');
 function renderSettings(){const b=$('sheetbody');document.body.append(TOOLS);b.innerHTML='';

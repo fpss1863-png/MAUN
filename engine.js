@@ -56,12 +56,12 @@ ov.addEventListener('pointerdown',e=>{if(Hi||!running||auto)return;
     else{pts=[];$('msg').textContent='الترتيب غلط: النقاط البعيدة لازم تكون أعلى. أعد المحاولة.'}}});
 
 // ---------- كاشف السيارات (COCO-SSD) ----------
-function initModel(){initML();if(modelP||!ST.detect)return;modelP=(async()=>{try{
+function initModel(){initML();window.Yolo&&Yolo.init();if(modelP||!ST.detect||(window.Yolo&&Yolo.sess))return;modelP=(async()=>{try{
   await loadScript('https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.22.0/dist/tf.min.js');
   await loadScript('https://cdn.jsdelivr.net/npm/@tensorflow-models/coco-ssd@2.2.3/dist/coco-ssd.min.js');
   model=await cocoSsd.load({base:'lite_mobilenet_v2'})}catch(e){$('msg').textContent='تعذر تحميل كاشف السيارات (يحتاج نت أول مرة).'}})()}
 const iou=(a,b)=>{const x=Math.max(0,Math.min(a[0]+a[2],b[0]+b[2])-Math.max(a[0],b[0])),y=Math.max(0,Math.min(a[1]+a[3],b[1]+b[3])-Math.max(a[1],b[1])),i=x*y;return i/(a[2]*a[3]+b[2]*b[3]-i)};
-function runDet(){if(!model||detBusy||!ST.detect)return;detBusy=true;
+function runDet(){if(window.Yolo&&Yolo.active()){Yolo.run();return}if(!model||detBusy||!ST.detect)return;detBusy=true;
   model.detect(pc,12,.45).then(r=>{r=r.filter(x=>x.score>=.5);r.forEach(x=>x.t=fn);window.Assist&&Assist.onDet(r);   // نحتفظ بالمربعات القديمة 10 فريمات عشان السيارة السريعة
     dets=r.concat(dets.filter(o=>fn-o.t<10&&!r.some(n=>n.class==o.class&&iou(n.bbox,o.bbox)>.2)))}).catch(()=>{}).finally(()=>detBusy=false)}
 
