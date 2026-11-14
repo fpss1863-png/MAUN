@@ -1,4 +1,3 @@
-
 const C={PW:480,PH:270,BW:180,BH:150,P:91,MINL:110,SM:.25,MISS:12,HOLD:12,CAR:350,EARLY:.15,WARN:.22,WARNF:6,CALF:45,NEAR:.8};
 const cfg0=JSON.parse(localStorage.getItem('lanecfg')||'{}');   // ما تعلّمه الموقع من تصحيحاتك
 for(const k of['WARN','EARLY','P'])if(typeof cfg0[k]=='number')C[k]=cfg0[k];
@@ -9,6 +8,7 @@ const video=$('video'),ov=$('ov'),octx=ov.getContext('2d');
 const pc=document.createElement('canvas');pc.width=PW;pc.height=PH;
 const pctx=pc.getContext('2d',{willReadFrequently:true});
 const bevC=$('bev'),bctx=bevC.getContext('2d');
+const ORT_FILE=navigator.gpu?'ort.webgpu.min.js':'ort.min.js';
 const loadScript=u=>new Promise((ok,no)=>{const s=document.createElement('script');s.src=u;s.onload=ok;s.onerror=no;document.head.appendChild(s)});
 
 // ---------- رياضيات ----------
@@ -78,12 +78,25 @@ const idb=()=>new Promise((ok,no)=>{const r=indexedDB.open('lane',2);r.onupgrade
 const idbGet=async k=>{const d=await idb();return new Promise(ok=>{const q=d.transaction('m').objectStore('m').get(k);q.onsuccess=()=>ok(q.result)})};
 const idbSet=async(k,v)=>{const d=await idb();return new Promise(ok=>{const t=d.transaction('m','readwrite');t.objectStore('m').put(v,k);t.oncomplete=ok})};
 let mlInit=false,mlLastT=-1;const mlAcc=[];
-function initML(){if(mlInit)return;mlInit=true;idbGet('ufld').then(b=>b&&loadML(b)).catch(()=>{})}
-async function loadML(buf){try{
-  if(typeof ort==='undefined')await loadScript('https://cdn.jsdelivr.net/npm/onnxruntime-web@1.18.0/dist/ort.min.js');
+function initML(){if(mlInit)return;mlInit=true;(async()=>{   // الموديل: رابط خارجي من config.js (MODEL_URL) أو models/lane.onnx
+  const ext=(window.MAUN_CONFIG&&MAUN_CONFIG.MODEL_URL)||'',url=ext||'models/lane.onnx',tag=localStorage.getItem('ufld-tag');let cached=null;
+  try{cached=await idbGet('ufld')}catch(e){}
+  if(tag!=='manual'){try{let t=ext;   // الرابط الخارجي نفسه هو رقم النسخة: غيّر الرابط = تحديث
+    if(!ext){const h=await fetch(url,{method:'HEAD',cache:'no-cache'});t=h.ok&&(h.headers.get('etag')||h.headers.get('content-length'))}
+    if(t&&(!cached||t!==tag)){$('msg').textContent='جاري تنزيل موديل المسارات (مرة واحدة، الحجم كبير)…';
+      const r=await fetch(url);
+      if(r.ok){const b=await r.arrayBuffer();if(b.byteLength>1e6){try{await idbSet('ufld',b);localStorage.setItem('ufld-tag',t)}catch(e){}return loadML(b)}}
+      $('msg').textContent='تعذر تنزيل الموديل من الرابط (رمز '+r.status+').'}}catch(e){$('msg').textContent='تعذر تنزيل الموديل: '+String(e.message||e).slice(0,60)}}
+  if(cached)loadML(cached);
+  else if(!/تعذر/.test($('msg').textContent))$('msg').textContent='ما فيه موديل مسارات. أستخدم الكشف التقليدي.'})()}
+async function loadML(buf,wasmOnly){try{
+  if(typeof ort==='undefined')await loadScript('https://cdn.jsdelivr.net/npm/onnxruntime-web@1.18.0/dist/'+ORT_FILE);
   ort.env.wasm.wasmPaths='https://cdn.jsdelivr.net/npm/onnxruntime-web@1.18.0/dist/';ort.env.wasm.numThreads=1;
-  ml.sess=await ort.InferenceSession.create(buf,{executionProviders:['wasm']});ml.on=true;ml.fails=0;ml.pick=null;
-  $('msg').textContent='موديل الذكاء جاهز.'}catch(e){ml.sess=null;$('msg').textContent='تعذر تحميل الموديل: '+String(e.message||e).slice(0,80)}}
+  ml.sess=null;ml.ep='wasm';ml.buf=buf;
+  if(navigator.gpu&&!wasmOnly){try{ml.sess=await ort.InferenceSession.create(buf,{executionProviders:['webgpu']});ml.ep='webgpu'}catch(e){ml.sess=null}}   // كرت الشاشة أسرع بكثير
+  if(!ml.sess)ml.sess=await ort.InferenceSession.create(buf,{executionProviders:['wasm']});
+  ml.on=true;ml.fails=0;ml.pick=null;ml.gerr=0;
+  $('msg').textContent='موديل الذكاء جاهز ('+(ml.ep=='webgpu'?'كرت الشاشة':'المعالج')+').'}catch(e){ml.sess=null;$('msg').textContent='تعذر تحميل الموديل: '+String(e.message||e).slice(0,80)}}
 function decodeUFLD(d,dims){const n=dims.length,G1=dims[n-3],R=dims[n-2],L=dims[n-1],G=G1-1,cw=799/(G-1),lanes=[];
   const anc=R==56?[...Array(56)].map((_,k)=>64+4*k):R==18?[121,131,141,151,161,171,181,191,201,211,221,231,241,251,261,271,281,287]
     :[...Array(R)].map((_,r)=>Math.round(288*(.4+.6*r/(R-1))));
@@ -103,7 +116,9 @@ async function runML(){if(!ml.sess||!ml.on||ml.busy)return;ml.busy=true;const t0
     for(let i=0;i<n;i++){f[i]=(px[i*4]/255-.485)/.229;f[n+i]=(px[i*4+1]/255-.456)/.224;f[2*n+i]=(px[i*4+2]/255-.406)/.225}
     const out=await ml.sess.run({[ml.sess.inputNames[0]]:new ort.Tensor('float32',f,[1,3,H,W])}),t=out[ml.sess.outputNames[0]];
     ml.lanes=decodeUFLD(t.data,t.dims);ml.pick=mlPick(ml.lanes);ml.t=performance.now();ml.ms=Math.round(ml.t-t0);ml.fails=0}
-  catch(e){ml.err=String(e.message||e).slice(0,80);ml.si=(ml.si+1)%ML_SIZES.length;
+  catch(e){ml.err=String(e.message||e).slice(0,80);
+    if(ml.ep=='webgpu'&&ml.buf&&++ml.gerr>=2){ml.busy=false;ml.on=false;loadML(ml.buf,true);return}
+    ml.si=(ml.si+1)%ML_SIZES.length;
     if(++ml.fails>=8){ml.on=false;$('msg').textContent='الموديل ما اشتغل ('+ml.err+'). رجعت للكشف التقليدي.'}}
   ml.busy=false}
 const mlFresh=()=>ml.sess&&ml.on&&ml.pick&&performance.now()-ml.t<1500;
@@ -217,12 +232,12 @@ const req=r=>new Promise((ok,no)=>{r.onsuccess=()=>ok(r.result);r.onerror=()=>no
 const store=async m=>(await idb()).transaction('e',m).objectStore('e');
 const evdb={async add(e){return req((await store('readwrite')).add(e))},async all(){return req((await store('readonly')).getAll())},
   async put(e){return req((await store('readwrite')).put(e))},
-  async trim(){const s=await store('readwrite'),k=await req(s.getAllKeys());for(const x of k.slice(0,Math.max(0,k.length-300)))s.delete(x)}};
+  async trim(){const ev=(await this.all()).filter(x=>x.kind!='frame');for(const x of ev.slice(0,Math.max(0,ev.length-300)))await req((await store('readwrite')).delete(x.id))}};
 const sc=document.createElement('canvas');sc.width=320;sc.height=180;const sctx=sc.getContext('2d');let ring=[],rc=0;
 const KIND={alert:'تنبيه انحراف',missed:'فاتني تنبيه',badlines:'الخطوط غلط'};
 async function saveEv(kind,x){try{await evdb.add(Object.assign({t:Date.now(),kind,label:null,src,spd,limit,ml:!!mlFresh(),
   params:{WARN:C.WARN,EARLY:C.EARLY,P:C.P,bias},imgs:ring.slice(-4),sent:false},x||{}));evdb.trim()}catch(e){}}
-async function showLog(){const b=$('log');let a=[];try{a=(await evdb.all()).reverse().slice(0,30)}catch(e){}
+async function showLog(){const b=$('log');let a=[];try{a=(await evdb.all()).filter(x=>x.kind!='frame').reverse().slice(0,30)}catch(e){}
   b.innerHTML=a.length?a.map(e=>`<div class="ev">${e.imgs[e.imgs.length-1]?`<img src="${e.imgs[e.imgs.length-1]}" width="96">`:''}<span>${new Date(e.t).toLocaleString('ar-SA')} — ${KIND[e.kind]||e.kind}${e.label?(e.label=='ok'?' ✓':' ✗'):''}</span>${e.kind=='alert'?`<button data-i="${e.id}" data-l="ok">✓ صح</button><button data-i="${e.id}" data-l="bad">✗ خطأ</button>`:''}</div>`).join(''):'لا توجد أحداث بعد. التنبيهات تنحفظ هنا تلقائياً.'}
 async function learn(id,label){const e=(await evdb.all()).find(x=>x.id==id);if(!e)return;e.label=label;await evdb.put(e);
   if(e.kind=='alert'&&label=='bad'){C.WARN=Math.min(.45,C.WARN*1.12);C.EARLY=Math.min(C.WARN-.05,C.EARLY*1.1);   // تنبيه خاطئ: نخفف الحساسية ونصحّح مركز المسار
@@ -306,7 +321,7 @@ function step(){
   const nm=s=>!s.c?'—':(s.y>.5?'أصفر':'أبيض')+(s.cov>.8?' متصل':' متقطع');
   emerg=!!(B.c&&B.cov>.85&&B.y<=.5&&!B.ml&&!lost);
   const sg=ST.signs&&dets.find(v=>v.class=='stop sign'),tl=ST.signs&&dets.find(v=>v.class=='traffic light');
-  const chips=mlFresh()?['🧠 ذكاء '+ml.ms+'ms']:[`يسار: ${nm(A)}`,`يمين: ${nm(B)}`];if(emerg)chips.push('🟠 خط طوارئ');if(sg)chips.push('🛑 وقوف');if(tl)chips.push('🚦 إشارة');if(over)chips.push('⚠ تجاوز السرعة');
+  const chips=mlFresh()?['🧠 '+(ml.ep=='webgpu'?'GPU ':'CPU ')+ml.ms+'ms']:[`يسار: ${nm(A)}`,`يمين: ${nm(B)}`];if(emerg)chips.push('🟠 خط طوارئ');if(sg)chips.push('🛑 وقوف');if(tl)chips.push('🚦 إشارة');if(over)chips.push('⚠ تجاوز السرعة');
   {const h=chips.map(c=>`<span>${c}</span>`).join('');if(h!==_chipsH){_chipsH=h;$('chips').innerHTML=h}}
   window.UI&&UI.speed(spdOK()?spd:null,limit,!!over);
   setStatus(text+(vw?'  '+vw:''),alert||vw.includes('جداً'));
@@ -413,17 +428,50 @@ $('cam').onclick=$('start').onclick;
 document.addEventListener('click',e=>{const b=e.target.closest('#log button[data-i]');if(b)learn(+b.dataset.i,b.dataset.l)});
 $('fn').onclick=()=>{C.WARN=Math.max(.12,C.WARN*.9);C.EARLY=Math.min(C.WARN-.04,Math.max(.08,C.EARLY*.92));saveCfg();saveEv('missed');
   $('msg').textContent=`سجّلت إنه فاتك تنبيه. زدت الحساسية (${C.WARN.toFixed(2)}).`};
-$('bl').onclick=()=>{saveEv('badlines');if(running){auto=true;resetCalib();$('msg').textContent='سجّلت إن الخطوط غلط، وأعدت المعايرة.'}};
+$('bl').onclick=()=>{saveEv('badlines');Train.capture('bad');if(running){auto=true;resetCalib();$('msg').textContent='سجّلت إن الخطوط غلط، وأعدت المعايرة.'}};
 $('sync').onclick=sync;
 $('mlf').onclick=()=>$('mlfile').click();
 $('mlfile').onchange=async e=>{const f=e.target.files[0];if(!f)return;$('msg').textContent='جاري قراءة الموديل…';
-  const b=await f.arrayBuffer();try{await idbSet('ufld',b)}catch(x){}loadML(b)};
+  const b=await f.arrayBuffer();try{await idbSet('ufld',b);localStorage.setItem('ufld-tag','manual')}catch(x){}loadML(b)};
 $('mlu').onclick=async()=>{const u=prompt('رابط ملف ONNX (UFLD v1)');if(!u)return;
-  try{$('msg').textContent='جاري تنزيل الموديل…';const b=await(await fetch(u)).arrayBuffer();try{await idbSet('ufld',b)}catch(x){}loadML(b)}
+  try{$('msg').textContent='جاري تنزيل الموديل…';const b=await(await fetch(u)).arrayBuffer();try{await idbSet('ufld',b);localStorage.setItem('ufld-tag','manual')}catch(x){}loadML(b)}
   catch(x){$('msg').textContent='فشل التنزيل: '+x.message}};
 $('mlt').onclick=()=>{ml.on=!ml.on&&!!ml.sess;$('msg').textContent=ml.on?'الذكاء مفعّل.':'الذكاء متوقف، الكشف التقليدي شغال.'};
 $('logb').onclick=()=>{const b=$('log');b.style.display=b.style.display=='block'?'none':'block';showLog()};
 $('dbg').onclick=()=>{showBev=!showBev;bevC.style.display=showBev?'block':'none'};
+
+// ---------- جمع بيانات التدريب (لقطات كاملة + توقع الموديل كتسمية أولية) ----------
+const Train={timer:null,MAX:600,
+  async count(){try{return(await evdb.all()).filter(x=>x.kind=='frame').length}catch(e){return 0}},
+  async capture(label,quiet){
+    if(!running||video.readyState<2||!video.videoWidth){if(!quiet)$('msg').textContent='شغّل الكاميرا أو الفيديو أولاً.';return false}
+    if(await this.count()>=this.MAX){this.stop();$('msg').textContent='وصلت الحد ('+this.MAX+' لقطة). صدّرها ثم احذفها.';return false}
+    const w=Math.min(1280,video.videoWidth),h=Math.round(w*video.videoHeight/video.videoWidth),c=document.createElement('canvas');
+    c.width=w;c.height=h;c.getContext('2d').drawImage(video,0,0,w,h);
+    const nl=l=>l&&l.map(([x,y])=>[+(x/PW).toFixed(4),+(y/PH).toFixed(4)]);   // إحداثيات نسبية 0..1
+    try{await evdb.add({t:Date.now(),kind:'frame',label:label||null,src,spd,limit,ml:!!mlFresh(),w,h,imgs:[],sent:true,
+      img:c.toDataURL('image/jpeg',.85),prelabel:mlFresh()&&ml.lanes?ml.lanes.map(nl):null,
+      classic:S.map(s=>s.c?s.c.map(v=>+v.toFixed(6)):null),calib:pts});
+      if(!quiet)$('msg').textContent='حفظت لقطة تدريب ('+await this.count()+')';return true}
+    catch(e){$('msg').textContent='تعذر الحفظ: '+String(e.message||e).slice(0,60);return false}},
+  start(){if(this.timer)return;this.timer=setInterval(()=>this.capture('auto',true),4000);$('msg').textContent='تسجيل تلقائي: لقطة كل 4 ثوانٍ.'},
+  stop(){clearInterval(this.timer);this.timer=null},
+  toggle(){if(this.timer){this.stop();$('msg').textContent='توقف التسجيل التلقائي.'}else this.start()},
+  async export(){
+    const fr=(await evdb.all()).filter(x=>x.kind=='frame');if(!fr.length){$('msg').textContent='ما فيه لقطات. فعّل التسجيل التلقائي أو التقط لقطات.';return}
+    try{if(!window.JSZip)await loadScript('https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js');
+      const z=new JSZip(),meta=[];
+      for(let i=0;i<fr.length;i++){const f=fr[i],n=String(i).padStart(5,'0')+'.jpg';
+        z.file('images/'+n,f.img.split(',')[1],{base64:true});
+        meta.push({file:n,t:f.t,label:f.label,w:f.w,h:f.h,spd:f.spd,prelabel:f.prelabel,classic:f.classic,calib:f.calib})}
+      z.file('labels.json',JSON.stringify(meta));
+      const b=await z.generateAsync({type:'blob'}),a=document.createElement('a');
+      a.href=URL.createObjectURL(b);a.download='maun-train-'+Date.now()+'.zip';a.click();
+      $('msg').textContent='صدّرت '+fr.length+' لقطة.'}
+    catch(e){$('msg').textContent='فشل التصدير: '+String(e.message||e).slice(0,60)}},
+  async clear(){if(!confirm('حذف كل لقطات التدريب من الجهاز؟'))return;
+    const fr=(await evdb.all()).filter(x=>x.kind=='frame');for(const x of fr)await req((await store('readwrite')).delete(x.id));$('msg').textContent='حُذفت اللقطات.'}};
+window.Train=Train;
 bevC.style.display='none';
 loop();
 if('serviceWorker' in navigator)navigator.serviceWorker.register('sw.js').catch(()=>{});
