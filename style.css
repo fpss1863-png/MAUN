@@ -102,3 +102,22 @@ button:active,.btn:active{transform:scale(.97)}button:hover,.btn:hover{border-co
 @media(prefers-reduced-motion:reduce){*{animation:none !important;transition:none !important}}
 #ppfloat{left:calc(62px + var(--sl))}
 .adv{margin:0 18px 10px}.adv>summary{cursor:pointer;color:var(--mu);font-size:13px;padding:8px 0}
+
+/* ---- V 1.0: إبلاغ، انتقالات، إصدار ---- */
+#rep{left:auto;right:calc(12px + var(--sr))}
+#repmenu{position:absolute;top:calc(62px + var(--st));right:calc(12px + var(--sr));z-index:8;display:flex;flex-direction:column;gap:6px;padding:8px;border-radius:16px;opacity:0;transform:translateY(-8px) scale(.96);transform-origin:top right;pointer-events:none;transition:opacity .25s var(--ease),transform .25s var(--ease)}
+#repmenu.on{opacity:1;transform:none;pointer-events:auto}
+#repmenu button{padding:10px 14px;border:0;border-radius:10px;background:rgba(255,255,255,.07);color:var(--tx);font:inherit;font-size:13px;text-align:right;cursor:pointer;transition:background .2s,transform .15s}
+#repmenu button:hover{background:rgba(255,255,255,.14)}
+#repmenu button:active{transform:scale(.97)}
+.ver{font-size:11px;color:#7d848c;text-align:center;letter-spacing:.08em;margin:10px 0 4px;direction:ltr}
+@keyframes fadeUp{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:none}}
+@keyframes pulse{0%{box-shadow:0 0 0 0 rgba(239,91,91,.55)}100%{box-shadow:0 0 0 14px rgba(239,91,91,0)}}
+.pill.alert{animation:pop .35s var(--ease),pulse 1.6s ease-out .35s infinite}
+#intro .introc>*{animation:fadeUp .55s var(--ease) both}
+#intro .introc>*:nth-child(2){animation-delay:.08s}#intro .introc>*:nth-child(3){animation-delay:.16s}#intro .introc>*:nth-child(4){animation-delay:.24s}#intro .introc>*:nth-child(5){animation-delay:.32s}
+details[open]>*:not(summary){animation:fadeUp .3s var(--ease) both}
+button{transition:transform .15s var(--ease),background .2s,opacity .2s}
+button:active{transform:scale(.96)}
+#hudinfo{transition:opacity .3s,transform .3s}
+#chips span{animation:fadeUp .3s var(--ease) both}

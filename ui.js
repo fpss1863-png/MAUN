@@ -141,10 +141,12 @@ window.Assist=Assist;
 const FORMAL=[[/^تمام$/,'قراءة واضحة','ok'],[/^خط واحد$/,'قراءة واضحة','ok'],[/^(من الذاكرة|لا توجد خطوط|فقدت الخطوط)/,'قراءة غير واضحة','idle'],[/انحراف نحو اليمين/,'انحراف نحو اليمين','alert'],[/انحراف نحو اليسار/,'انحراف نحو اليسار','alert'],
   [/اقتربت من خط اليمين/,'اقتراب من الخط الأيمن','warn'],[/اقتربت من خط اليسار/,'اقتراب من الخط الأيسر','warn'],[/يتعلم وضعك/,'جارٍ تهيئة القراءة','idle'],[/معايرة تلقائية/,'جارٍ المعايرة','idle'],
   [/عايِر المسار/,'يرجى معايرة المسار','idle'],[/تغيير مسار/,'تغيير مسار','warn'],[/متوقف/,'تحليل المسارات متوقف','idle']];
-let flashP=null,_paint='',_raw=['جاهز',false];
+let holdP=null,flashP=null,_paint='',_raw=['جاهز',false];
 function paint(){const now=performance.now();let txt,cls;
   if(flashP&&now<flashP.until){txt=flashP.text;cls=flashP.level==='danger'?'alert':flashP.level==='warn'?'warn':'ok'}
   else{flashP=null;const[t,a]=_raw,m=FORMAL.find(x=>x[0].test(t));txt=m?m[1]:t;cls=m?m[2]:(a?'alert':'ok');if(m&&m[1]==='قراءة واضحة'&&clarity<.55){txt='قراءة غير واضحة';cls='idle'}}
+  if(cls==='alert'||cls==='warn'){if(!holdP||holdP.txt!==txt)holdP={txt,cls,until:now+2400}}   // التنبيه يبقى ظاهراً 2.4 ثانية ليُقرأ
+  else if(holdP&&now<holdP.until){txt=holdP.txt;cls=holdP.cls}
   const k=txt+'|'+cls;if(k===_paint)return;_paint=k;$('status').textContent=txt;$('pill').className='pill '+cls}
 window.setStatus=(t,a)=>{_raw=[t,a];paint()};
 window.Radar=Radar;
@@ -228,7 +230,7 @@ const UI={_k:'',ar:16/9,
     if(ST.showConf){if(ST.lanes)L.push(`ثقة المسار ${Math.round(lc*100)}%`);if(Assist.leadM)L.push('ثقة المسافة: '+Assist.leadM.conf)}
     Trip.update();if(ST.showTrip&&Trip.start&&src==='cam')L.push('مدة القيادة '+fmtDur((Date.now()-Trip.start)/60000));const av=Assist.avail();if(av)L.push(av);if(ST.radar&&Radar.near)L.push(`أقرب رادار: ${Radar.near.d<1000?Math.round(Radar.near.d)+' م':(Radar.near.d/1000).toFixed(1)+' كم'}`);
     if(ST.showFps&&ST.detect)L.push(Yolo.active()?`YOLO ${Yolo.ms}م.ث · ${Yolo.layout}`:(model?'COCO-SSD':'كاشف الأجسام غير جاهز'));
-    $('hudinfo').innerHTML=L.map(esc).join('<br>');const ys=$('yolostat');if(ys)ys.textContent=Yolo.sess?`محمّل · ${Yolo.layout||'—'} · ${Yolo.nc||'?'} فئة · ${Yolo.ms}م.ث`+(Yolo.err?' · '+Yolo.err:''):'لا يوجد موديل YOLO محمّل.';const c=$('calstat');if(c)c.textContent=Hi?`معايرة سارية — ثقة المسار ${Math.round(lc*100)}%`:'غير معايَر'}};
+    if(typeof ml!=='undefined'&&mlFresh())L.push((ml.ep=='webgpu'?'GPU':'CPU')+' '+ml.ms+'ms');$('hudinfo').innerHTML=L.map(esc).join('<br>');const ys=$('yolostat');if(ys)ys.textContent=Yolo.sess?`محمّل · ${Yolo.layout||'—'} · ${Yolo.nc||'?'} فئة · ${Yolo.ms}م.ث`+(Yolo.err?' · '+Yolo.err:''):'لا يوجد موديل YOLO محمّل.';const c=$('calstat');if(c)c.textContent=Hi?`معايرة سارية — ثقة المسار ${Math.round(lc*100)}%`:'غير معايَر'}};
 window.UI=UI;
 
 function applyST(){const s=$('stage');s.dataset.gauge=ST.gaugeStyle;s.dataset.size=ST.gaugeSize;$('gaugeBox').style.display=ST.showSpeed?'':'none';
@@ -249,7 +251,7 @@ const fillCard=c=>{const a=Cars.active();c.innerHTML=a?`<span class="th" style="
   c.querySelector('button').onclick=()=>{openSheet(false);a?openCars():openForm()}};
 const goFullscreen=()=>{const d=document.documentElement,f=d.requestFullscreen||d.webkitRequestFullscreen;if(f)Promise.resolve(f.call(d)).catch(()=>{});else $('msg').textContent='على الآيفون: مشاركة ← إضافة إلى الشاشة الرئيسية، ثم افتحه منها لملء الشاشة'};
 const SCHEMA=[
- {t:'الحساب والملفات',open:1,extra:()=>{const w=el('div'),c=el('div','acard'),h=el('div','acc');c.id='acard';fillCard(c);w.append(c,h);renderAcct(h);return w}},
+ {t:'الحساب والملفات',extra:()=>{const w=el('div'),c=el('div','acard'),h=el('div','acc');c.id='acard';fillCard(c);w.append(c,h);renderAcct(h);return w}},
  {t:'مساعد السائق',items:[['cars','toggle','اكتشاف السيارات الأمامية'],['approach','toggle','تنبيه الاقتراب من السيارات'],['cutin','toggle','تنبيه تغيير المسار'],['leadmove','toggle','تنبيه تحرك السيارة الأمامية'],
    ['showSpeed','toggle','عرض السرعة الحالية'],['speedSign','toggle','قراءة حدود السرعة'],['overspeed','toggle','تنبيه تجاوز السرعة']],
    extra:()=>lab('تقدير المسافة من كاميرا واحدة تقريبي وتظهر معه درجة الثقة. تنبيه تحرك الأمامية يحتاج GPS (السرعة صفر). هذه مساعدة للسائق وليست نظام سلامة.')},
@@ -265,7 +267,7 @@ const SCHEMA=[
    ['sens','select','حساسية التنبيهات',[['low','منخفضة'],['mid','متوسطة'],['high','عالية']]],['tInfo','select','صوت المعلومات',T3],['tWarn','select','صوت التحذير',T3],['tDanger','select','صوت الخطر',T3]]},
  {t:'العرض',items:[['gaugeStyle','select','شكل العداد',[['ring','حلقة'],['minimal','أرقام فقط']]],['gaugeSize','select','حجم العداد',[['s','صغير'],['m','وسط'],['l','كبير']]],['fit','select','عرض الكاميرا',[['cover','ملء الشاشة'],['contain','كامل الإطار']]]],
    extra:()=>seg([['ملء الشاشة (المتصفح)',goFullscreen]])},
- {t:'الكاميرا والمعايرة',items:[['camH','select','جودة الفيديو',[[480,'480p'],[720,'720p'],[1080,'1080p']]],['camFps','select','معدل إطارات الكاميرا',[[15,'15'],[24,'24'],[30,'30']]],['procFps','select','معدل التحليل',[[10,'10'],[15,'15'],[20,'20'],[30,'30']]],
+ {t:'الكاميرا والمعايرة',open:1,items:[['camH','select','جودة الفيديو',[[480,'480p'],[720,'720p'],[1080,'1080p']]],['camFps','select','معدل إطارات الكاميرا',[[15,'15'],[24,'24'],[30,'30']]],['procFps','select','معدل التحليل',[[10,'10'],[15,'15'],[20,'20'],[30,'30']]],
    ['fov','select','زاوية عدسة الجوال',[[55,'55°'],[65,'65°'],[75,'75°'],[85,'85°']]],['camHeight','select','ارتفاع الكاميرا عن الأرض',[[1.1,'1.1 م'],[1.2,'1.2 م'],[1.3,'1.3 م'],[1.4,'1.4 م'],[1.5,'1.5 م']]]],
    extra:()=>{const w=el('div'),r=el('div','srow'),sel=el('select');sel.id='camsel';sel.add(new Option('الخلفية (افتراضي)',''));r.append(el('span','','الكاميرا'),sel);
      sel.onchange=()=>{ST.camId=sel.value;changed('camId')};
@@ -286,6 +288,7 @@ const SCHEMA=[
        lab('موديل المسارات (UFLD v1)'),seg([['من ملف',()=>$('mlf').click()],['من رابط',()=>$('mlu').click()],['تشغيل / إيقاف',()=>$('mlt').click()]]));return w}},
  {t:'البيانات والتعلم',extra:()=>{const w=el('div'),lg=el('div');lg.id='log';w.append(lab('سجّل ما تلاحظه ليتحسن النظام:'),seg([['فاتني تنبيه',()=>$('fn').click()],['الخطوط غلط',()=>{$('bl').click();openSheet(false)}]]),seg([['سجل الأحداث',()=>$('logb').click()],['رفع الأحداث',()=>$('sync').click()]]),lab('بيانات تدريب الموديل:'),seg([['📸 لقطة',()=>Train.capture('manual')],['تسجيل تلقائي',()=>Train.toggle()]]),seg([['تصدير للتدريب',()=>Train.export()],['حذف اللقطات',()=>Train.clear()]]),lg);return w}},
  {t:'متقدم',items:[['showFps','toggle','عرض FPS'],['showConf','toggle','عرض الدقة والثقة']],extra:()=>seg([['نافذة المنظور (فحص)',()=>$('dbg').click()]])}];
+{const ORD=['الكاميرا والمعايرة','الطريق','مساعد السائق','اللوحات والإشارات','الصوت والتنبيهات','العرض','مدة القيادة والاستراحة','الحساب والملفات'],a=ORD.map(t=>SCHEMA.find(x=>x.t===t)).filter(Boolean);SCHEMA.length=0;SCHEMA.push(...a)}   // إزالة: الرادار، نماذج الذكاء، البيانات والتعلم، متقدم
 function renderSettings(){const b=$('sheetbody'),open=[...b.querySelectorAll('details[open]')].map(d=>d.firstChild.textContent);b.innerHTML='';
   for(const sec of SCHEMA){const d=el('details','sec');if(sec.open||open.includes(sec.t))d.open=true;d.append(el('summary','',sec.t));
     for(const[k,type,label,opts]of(sec.items||[])){const row=el('div','srow');row.append(el('span','',label));
@@ -293,7 +296,7 @@ function renderSettings(){const b=$('sheetbody'),open=[...b.querySelectorAll('de
       else if(type==='select'){const s=el('select');for(const[v,t]of opts)s.add(new Option(t,v));s.value=String(ST[k]);if(s.value===''&&ST[k]!==''){s.add(new Option(String(ST[k]),ST[k]));s.value=String(ST[k])}s.onchange=()=>{ST[k]=isNaN(+s.value)||s.value===''?s.value:+s.value;changed(k)};row.append(s)}
       else{const r=el('input');r.type='range';[r.min,r.max,r.step]=opts;r.value=ST[k];r.onchange=()=>{ST[k]=+r.value;changed(k)};row.append(r)}
       d.append(row)}
-    if(sec.extra)d.append(sec.extra());b.append(d)}}
+    if(sec.extra)d.append(sec.extra());b.append(d)}b.append(el('div','ver','V 1.0'))}
 function refreshSheet(){const c=$('calstat');if(c)c.textContent=Hi?`معايرة سارية — ثقة المسار ${Math.round(lc*100)}%`:'غير معايَر';renderChip()}
 const openSheet=o=>{$('sheet').classList.toggle('on',o);$('scrim').classList.toggle('on',o);if(o)refreshSheet()};
 

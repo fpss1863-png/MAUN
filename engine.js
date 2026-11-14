@@ -1,3 +1,4 @@
+
 const C={PW:480,PH:270,BW:180,BH:150,P:91,MINL:110,SM:.25,MISS:12,HOLD:12,CAR:350,EARLY:.15,WARN:.22,WARNF:6,CALF:45,NEAR:.8};
 const cfg0=JSON.parse(localStorage.getItem('lanecfg')||'{}');   // ما تعلّمه الموقع من تصحيحاتك
 for(const k of['WARN','EARLY','P'])if(typeof cfg0[k]=='number')C[k]=cfg0[k];
@@ -39,7 +40,7 @@ const S=[0,1].map(()=>({c:null,miss:0,rej:0,y:0,cov:1,car:0,seen:false}));
 let laneW=BW/3,calib=[],base=null,bad=0,lastOff=null,lastBoth=-999,flash=0,fn=0,lastBeep=0,actx=null,wasLost=false;
 let model=null,modelP=null,dets=[],detBusy=false,limit=null,limitT=0,ocrBusy=false,tess=null,reads=[],spd=null,gpsId=null;
 
-let auto=true,earlyN=0,devPrev=0,alertOn=false,okRun=0,lastSpeak=0;
+let auto=true,earlyN=0,devPrev=0,alertOn=false,okRun=0,lastSpeak=0,muteUntil=0,alertBeeps=0,lostT=0;
 let lastProc=0,fpsN=0,fpsT=0,fpsV=0,gpsT=0,gpsAcc=99;
 function spdOK(){return spd!=null&&performance.now()-gpsT<3000&&gpsAcc<=30}
 let clarity=0,crossN=[0,0],_chipsH='',bevMap=new Int32Array(BW*BH);
@@ -50,7 +51,7 @@ function setCalib(p){pts=p;yF=Math.min(p[0][1],p[1][1])|0;yN=Math.max(p[2][1],p[
   const d=[[BW/3,0],[BW*2/3,0],[BW*2/3,BH],[BW/3,BH]];Hi=homography(d,p);Hf=homography(p,d);buildBevMap();resetState()}
 let triedLast=false,tessA=null;
 function saveCal(p){const s=JSON.stringify(p);localStorage.setItem(calKey,s);localStorage.setItem('pts-last-'+calKey,s)}
-function resetCalib(){pts=[];Hi=null;triedLast=false;localStorage.removeItem(calKey);resetState();ah.fill(0);macc.fill(0);aN=0;aFr=0;
+function resetCalib(){hoodReset();pts=[];Hi=null;triedLast=false;localStorage.removeItem(calKey);resetState();ah.fill(0);macc.fill(0);aN=0;aFr=0;
   if(auto){$('msg').textContent='معايرة تلقائية: سر على الطريق وخلّ الخطوط ظاهرة…';return}
   $('msg').textContent='اضغط 4 نقاط على خطي مسارك: 1 بعيد-يسار، 2 بعيد-يمين، 3 قريب-يمين، 4 قريب-يسار (فوق الكبوت).'}
 ov.addEventListener('pointerdown',e=>{if(Hi||!running||auto)return;
@@ -131,10 +132,10 @@ function mlLine(i){const p=ml.pick&&(i?ml.pick.R:ml.pick.L);if(!p)return null;co
 function mlCalStep(){if(!ml.pick||ml.t===mlLastT)return;mlLastT=ml.t;
   const fit=p=>{const[,a,b]=polyfit(p.map(q=>q[1]),p.map(q=>q[0]),1);return[a,b]};
   if(ml.pick.L&&ml.pick.R)mlAcc.push([...fit(ml.pick.L),...fit(ml.pick.R),Math.max(...ml.pick.L.map(q=>q[1]),...ml.pick.R.map(q=>q[1]))]);
-  if(mlAcc.length<6)return;
+  if(mlAcc.length<8)return;
   const med=k=>mlAcc.map(r=>r[k]).sort((p,q)=>p-q)[mlAcc.length>>1];
-  const[aL,bL,aR,bR,low]=[0,1,2,3,4].map(med);mlAcc.length=0;
-  const vpy=(bR-bL)/(aL-aR),yn=Math.min(low,PH*C.NEAR),yf=vpy+.5*(yn-vpy),lx=y=>aL*y+bL,rx=y=>aR*y+bR;
+  const[aL,bL,aR,bR]=[0,1,2,3].map(med),lw=mlAcc.map(r=>r[4]).sort((p,q)=>p-q),low=lw[lw.length>>2]-PH*.03;mlAcc.length=0;   // حافة قريبة محافظة: ما نثق بنقاط الموديل فوق الكبوت
+  const vpy=(bR-bL)/(aL-aR),yn=Math.min(low,PH*C.NEAR,hoodLimit()),yf=vpy+.5*(yn-vpy),lx=y=>aL*y+bL,rx=y=>aR*y+bR;
   const p=[[lx(yf),yf],[rx(yf),yf],[rx(yn),yn],[lx(yn),yn]];
   if(!(aR>aL)||vpy<PH*.15||vpy>yn-30||rx(yn)-lx(yn)<PW*.22||rx(yn)-lx(yn)>PW*.9||p.some(([x,y])=>x<0||x>PW||y<0||y>PH))return;
   saveCal(p);setCalib(p);$('msg').textContent='تمت المعايرة بالذكاء الاصطناعي.'}
@@ -224,7 +225,7 @@ function beep(strong,gap){const t=performance.now();gap=gap||2000;if(!actx||t-la
   [[strong?1500:1000,0],[strong?1000:0,.16]].forEach(([f,d])=>{if(!f)return;const o=actx.createOscillator(),g=actx.createGain();
     o.type='square';o.frequency.value=f;g.gain.value=strong?.9:.35;o.connect(g);g.connect(actx.destination);
     o.start(actx.currentTime+d);o.stop(actx.currentTime+d+.14)});
-  if(strong&&navigator.vibrate)navigator.vibrate([200,80,200])}
+  if(strong&&navigator.vibrate)navigator.vibrate([200,80,200]);return true}
 function speak(t){const n=performance.now();if(!window.speechSynthesis||n-lastSpeak<4000)return;lastSpeak=n;
   try{const u=new SpeechSynthesisUtterance(t);u.lang='ar-SA';u.rate=1.1;speechSynthesis.speak(u)}catch(e){}}
 function logEvt(type){const a=JSON.parse(localStorage.getItem('lanelog')||'[]');
@@ -235,7 +236,7 @@ const evdb={async add(e){return req((await store('readwrite')).add(e))},async al
   async put(e){return req((await store('readwrite')).put(e))},
   async trim(){const ev=(await this.all()).filter(x=>x.kind!='frame');for(const x of ev.slice(0,Math.max(0,ev.length-300)))await req((await store('readwrite')).delete(x.id))}};
 const sc=document.createElement('canvas');sc.width=320;sc.height=180;const sctx=sc.getContext('2d');let ring=[],rc=0;
-const KIND={alert:'تنبيه انحراف',missed:'فاتني تنبيه',badlines:'الخطوط غلط'};
+const KIND={alert:'تنبيه انحراف',missed:'فاتني تنبيه',badlines:'الخطوط غلط',falsealert:'تنبيه خاطئ'};
 async function saveEv(kind,x){try{await evdb.add(Object.assign({t:Date.now(),kind,label:null,src,spd,limit,ml:!!mlFresh(),
   params:{WARN:C.WARN,EARLY:C.EARLY,P:C.P,bias},imgs:ring.slice(-4),sent:false},x||{}));evdb.trim()}catch(e){}}
 async function showLog(){const b=$('log');let a=[];try{a=(await evdb.all()).filter(x=>x.kind!='frame').reverse().slice(0,30)}catch(e){}
@@ -286,6 +287,7 @@ function step(){
     crossN=[0,0];flash=60;bad=0;alertOn=false;okRun=0;lastOff=null;acc.fill(0);logEvt('تغيير مسار')}
   // فقدان كلي: نوقف ونبدأ من جديد
   const lost=!(A.c||B.c)||Math.min(A.miss,B.miss)>C.HOLD;
+  if(lost){if(!lostT)lostT=performance.now();else if(auto&&performance.now()-lostT>4000){lostT=0;resetCalib();return}}else lostT=0;   // اختفت الخطوط 4 ثوانٍ: نعاير من جديد
   if(lost){if(!wasLost){acc.fill(0);base=null;calib=[];bad=0;lastOff=null}S.forEach(s=>{s.c=null;s.rej=0});wasLost=true}
   else wasLost=false;
   if(A.seen&&B.seen){const w=B.c?xat(B.c,BH)-xat(A.c,BH):0;if(w>BW*.2&&w<BW*.5)laneW=.95*laneW+.05*w}
@@ -302,10 +304,10 @@ function step(){
     else{const dev=off-base-bias,vel=dev-devPrev,a=Math.abs(dev),dir=dev<0?'اليمين':'اليسار';devPrev=dev;
       $('gmark').style.left=(50-Math.max(-1,Math.min(1,dev/.5))*45)+'%';
       if(a>C.WARN*SENSF()&&flash<=0){bad++;okRun=0}else{bad=0;okRun++}
-      if(!alertOn&&bad>=C.WARNF&&clarity>=.4){alertOn=true;logEvt('انحراف نحو '+dir);saveEv('alert',{dev:off-base,off});speak('انتبه، انحراف نحو '+dir)}
+      if(!alertOn&&performance.now()>muteUntil&&bad>=C.WARNF&&clarity>=.4){alertOn=true;alertBeeps=0;logEvt('انحراف نحو '+dir);saveEv('alert',{dev:off-base,off});speak('انتبه، انحراف نحو '+dir)}
       if(alertOn&&okRun>=8)alertOn=false;
-      if(alertOn){alert=true;text='⚠ انحراف نحو '+dir+'!';beep(1,650)}
-      else if(a>C.EARLY*SENSF()&&vel*dev>0){if(++earlyN>=4){text='اقتربت من خط '+dir;beep(0,1500)}}else earlyN=0}}
+      if(alertOn){alert=true;text='⚠ انحراف نحو '+dir+'!';if(alertBeeps<2&&beep(1,650))alertBeeps++}
+      else if(a>C.EARLY*SENSF()&&vel*dev>0){if(++earlyN>=4){text='اقتربت من خط '+dir;if(performance.now()>muteUntil)beep(0,1500)}}else earlyN=0}}
   else{bad=0;alertOn=false}
   if(flash>0&&!alert){flash--;if(off!=null)text='تغيير مسار'}
   // سيارة داخل مساري؟
@@ -322,7 +324,7 @@ function step(){
   const nm=s=>!s.c?'—':(s.y>.5?'أصفر':'أبيض')+(s.cov>.8?' متصل':' متقطع');
   emerg=!!(B.c&&B.cov>.85&&B.y<=.5&&!B.ml&&!lost);
   const sg=ST.signs&&dets.find(v=>v.class=='stop sign'),tl=ST.signs&&dets.find(v=>v.class=='traffic light');
-  const chips=mlFresh()?['🧠 '+(ml.ep=='webgpu'?'GPU ':'CPU ')+ml.ms+'ms']:[`يسار: ${nm(A)}`,`يمين: ${nm(B)}`];if(emerg)chips.push('🟠 خط طوارئ');if(sg)chips.push('🛑 وقوف');if(tl)chips.push('🚦 إشارة');if(over)chips.push('⚠ تجاوز السرعة');
+  const chips=mlFresh()?[]:[`يسار: ${nm(A)}`,`يمين: ${nm(B)}`];if(emerg)chips.push('🟠 خط طوارئ');if(sg)chips.push('🛑 وقوف');if(tl)chips.push('🚦 إشارة');if(over)chips.push('⚠ تجاوز السرعة');
   {const h=chips.map(c=>`<span>${c}</span>`).join('');if(h!==_chipsH){_chipsH=h;$('chips').innerHTML=h}}
   window.UI&&UI.speed(spdOK()?spd:null,limit,!!over);
   setStatus(text+(vw?'  '+vw:''),alert||vw.includes('جداً'));
@@ -360,8 +362,24 @@ function loop(){requestAnimationFrame(loop);
   pctx.drawImage(video,0,0,PW,PH);runML();
   if(++rc%15==0){sctx.drawImage(video,0,0,320,180);ring.push(sc.toDataURL('image/jpeg',.6));if(ring.length>8)ring.shift()}
   if(Hi)step();
-  else if(auto){octx.clearRect(0,0,OW,OH);setStatus('معايرة تلقائية '+Math.min(99,Math.round(aN/14*100))+'%',false);(ml.sess&&ml.on)?mlCalStep():autoStep()}
+  else if(auto){octx.clearRect(0,0,OW,OH);setStatus('معايرة تلقائية '+Math.min(99,Math.round(aN/14*100))+'%',false);hoodStep();(ml.sess&&ml.on)?mlCalStep():autoStep()}
   else{idle();setStatus('عايِر المسار (4 نقاط)',false)}}
+
+// ---------- كشف الكبوت: الصفوف السفلية الثابتة بين الفريمات (الكبوت ثابت والطريق يتحرك) ----------
+const HY0=Math.round(PH*.5),hm=new Float32Array(PH);let hn=0,hg=null,hk=0,hoodY=null;
+function hoodReset(){hm.fill(0);hn=0;hg=null;hk=0;hoodY=null}
+function hoodStep(){if(++hk%4)return;
+  const n=PH-HY0,d=pctx.getImageData(0,HY0,PW,n).data,g=new Uint8Array(PW*n);
+  for(let i=0;i<g.length;i++){const j=i*4;g[i]=(d[j]*77+d[j+1]*150+d[j+2]*29)>>8}
+  if(hg){for(let y=0;y<n;y++){let s=0;for(let x=0;x<PW;x+=3)s+=Math.abs(g[y*PW+x]-hg[y*PW+x]);hm[HY0+y]+=s/(PW/3)}hn++}
+  hg=g;if(hn>=12&&hoodY==null&&hn%4==0)hoodEst()}
+function hoodEst(){const m=[];for(let y=0;y<PH;y++)m[y]=hm[y]/hn;
+  const sm=y=>{let s=0,c=0;for(let k=-2;k<=2;k++)if(m[y+k]!=null){s+=m[y+k];c++}return s/c};
+  const ref=[];for(let y=Math.round(PH*.58);y<=Math.round(PH*.66);y++)ref.push(sm(y));ref.sort((a,b)=>a-b);const R=ref[ref.length>>1];
+  if(!(R>1.5))return;   // حركة غير كافية للحكم (واقف أو طريق ملساء): نكمل الجمع
+  let y=PH-1;while(y>HY0&&sm(y)<.35*R)y--;
+  hoodY=(PH-1-y>=Math.round(PH*.03))?y+1:PH}   // PH = ما فيه كبوت
+const hoodLimit=()=>hoodY>0&&hoodY<PH?hoodY-Math.round(PH*.02):PH;
 
 // ---------- معايرة تلقائية: نجمع تصويت خطوط (Hough) ونأخذ أقرب خطين لمركز الصورة ----------
 const AY0=Math.round(PH*.52),AY1=Math.round(PH*.88),AB0=Math.round(PW*.2),AB1=Math.round(PW*.8),AS=6,AX0=-Math.round(PW*.3),
@@ -397,7 +415,7 @@ function finishAuto(){let mL=0,mR=0,bl=null,br=null;
   const sup=new Float32Array(PH);   // أين تنتهي الخطوط من تحت؟ (الكبوت)
   for(let y=AY0;y<AY1;y++){let c=0;for(const x0 of[lx(y),rx(y)])for(let x=Math.round(x0)-3;x<=Math.round(x0)+3;x++)if(x>=0&&x<PW&&macc[y*PW+x]>2)c++;sup[y]=c}
   let yn=AY0+10;for(let y=AY1-1;y>AY0+10;y--){let t=0;for(let k=0;k<6;k++)t+=sup[y-k];if(t>=4){yn=y-4;break}}
-  let yf=Math.round(vpy+.5*(yn-vpy));if(yn-yf<25)yf=yn-25;if(yf<=vpy+8)return fail();
+  yn=Math.min(yn,hoodLimit());let yf=Math.round(vpy+.5*(yn-vpy));if(yn-yf<25)yf=yn-25;if(yf<=vpy+8)return fail();
   const p=[[lx(yf),yf],[rx(yf),yf],[rx(yn),yn],[lx(yn),yn]];
   if(p.some(([x,y])=>x<0||x>PW||y<0||y>PH))return fail();
   saveCal(p);setCalib(p);$('msg').textContent=approx?'تمت المعايرة تلقائياً (تقريبية). للدقة الأعلى استخدم المعايرة اليدوية.':'تمت المعايرة تلقائياً.'}
@@ -406,7 +424,8 @@ function finishAuto(){let mL=0,mR=0,bl=null,br=null;
 function stopSrc(){video.pause();const s=video.srcObject;if(s)s.getTracks().forEach(t=>t.stop());
   video.srcObject=null;video.removeAttribute('src');dets=[];limit=null;
   if(gpsId!=null){navigator.geolocation.clearWatch(gpsId);gpsId=null;spd=null}}
-function loadCal(){const saved=localStorage.getItem(calKey);
+function loadCal(){if(auto){resetCalib();return false}   // دائماً معايرة تلقائية عند البدء
+  const saved=localStorage.getItem(calKey);
   if(saved){setCalib(JSON.parse(saved));$('msg').textContent='المعايرة محفوظة.';return true}resetCalib();return false}
 $('start').onclick=async()=>{
   try{actx=actx||new (window.AudioContext||window.webkitAudioContext)();stopSrc();src='cam';calKey='pts-cam-'+Cars.activeId();
@@ -429,7 +448,7 @@ $('cam').onclick=$('start').onclick;
 document.addEventListener('click',e=>{const b=e.target.closest('#log button[data-i]');if(b)learn(+b.dataset.i,b.dataset.l)});
 $('fn').onclick=()=>{C.WARN=Math.max(.12,C.WARN*.9);C.EARLY=Math.min(C.WARN-.04,Math.max(.08,C.EARLY*.92));saveCfg();saveEv('missed');
   $('msg').textContent=`سجّلت إنه فاتك تنبيه. زدت الحساسية (${C.WARN.toFixed(2)}).`};
-$('bl').onclick=()=>{saveEv('badlines');Train.capture('bad');if(running){auto=true;resetCalib();$('msg').textContent='سجّلت إن الخطوط غلط، وأعدت المعايرة.'}};
+$('bl').onclick=reportLines;
 $('sync').onclick=sync;
 $('mlf').onclick=()=>$('mlfile').click();
 $('mlfile').onchange=async e=>{const f=e.target.files[0];if(!f)return;$('msg').textContent='جاري قراءة الموديل…';
@@ -473,6 +492,15 @@ const Train={timer:null,MAX:600,
   async clear(){if(!confirm('حذف كل لقطات التدريب من الجهاز؟'))return;
     const fr=(await evdb.all()).filter(x=>x.kind=='frame');for(const x of fr)await req((await store('readwrite')).delete(x.id));$('msg').textContent='حُذفت اللقطات.'}};
 window.Train=Train;
+// ---------- أزرار الإبلاغ ----------
+function reportLines(){saveEv('badlines');Train.capture('bad',true);$('msg').textContent='سجّلت أن الخطوط خاطئة. أعيد المعايرة.';
+  if(running){auto=true;resetCalib();if(src=='file')video.play()}}
+function reportAlert(){alertOn=false;bad=0;okRun=0;earlyN=0;muteUntil=performance.now()+20000;saveEv('falsealert',{dev:devPrev});
+  C.WARN=Math.min(.45,C.WARN*1.08);saveCfg();$('msg').textContent='سجّلت أن التنبيه خاطئ. سكتّ التنبيهات 20 ثانية.'}
+$('rep').onclick=e=>{e.stopPropagation();$('repmenu').classList.toggle('on')};
+document.addEventListener('click',e=>{if(!e.target.closest('#repmenu,#rep'))$('repmenu').classList.remove('on')});
+$('repL').onclick=()=>{$('repmenu').classList.remove('on');reportLines()};
+$('repA').onclick=()=>{$('repmenu').classList.remove('on');reportAlert()};
 bevC.style.display='none';
 loop();
 if('serviceWorker' in navigator)navigator.serviceWorker.register('sw.js').catch(()=>{});
