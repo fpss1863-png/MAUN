@@ -159,7 +159,7 @@ const Yolo={sess:null,busy:false,ms:0,layout:'',nc:0,err:'',fails:0,lastOcr:0,_i
     if(n0&&a.length!==n0)return n0===80?COCO:Array.from({length:n0},(_,i)=>a[i]||'cls'+i);return a},
   active(){return !!(this.sess&&ST.yolo&&ST.detect)},
   init(){if(this._i)return;this._i=1;idbGet('yolo').then(b=>b&&this.load(b)).catch(()=>{})},
-  async load(buf){try{if(typeof ort==='undefined')await loadScript(ORT_BASE+'ort.min.js');ort.env.wasm.wasmPaths=ORT_BASE;ort.env.wasm.numThreads=1;
+  async load(buf){try{if(typeof ort==='undefined')await loadScript(ORT_BASE+ORT_FILE);ort.env.wasm.wasmPaths=ORT_BASE;ort.env.wasm.numThreads=1;
       this.sess=await ort.InferenceSession.create(buf,{executionProviders:['wasm']});this.fails=0;$('msg').textContent='موديل YOLO جاهز.';if(window.UI)UI.tick()}
     catch(e){this.sess=null;$('msg').textContent='تعذر تحميل YOLO: '+String(e.message||e).slice(0,80)}},
   async run(){if(this.busy||video.readyState<2||!video.videoWidth)return;this.busy=true;const t0=performance.now();
@@ -284,7 +284,7 @@ const SCHEMA=[
        lab('الخطوة 2: حمّل ملف yolo11n.onnx هنا'),seg([['من ملف',()=>f.click()],['من رابط',async()=>{const u=prompt('رابط ملف ONNX (YOLOv8/11)');if(!u)return;try{$('msg').textContent='جاري التنزيل…';const b=await(await fetch(u)).arrayBuffer();try{await idbSet('yolo',b)}catch(e){}Yolo.load(b)}catch(e){$('msg').textContent='فشل التنزيل: '+e.message}}],
        ['حذف',()=>{Yolo.sess=null;try{idbSet('yolo',null)}catch(e){}$('msg').textContent='تم حذف موديل YOLO.';if(ST.detect)initModel()}]]),f,st,dn,
        lab('موديل المسارات (UFLD v1)'),seg([['من ملف',()=>$('mlf').click()],['من رابط',()=>$('mlu').click()],['تشغيل / إيقاف',()=>$('mlt').click()]]));return w}},
- {t:'البيانات والتعلم',extra:()=>{const w=el('div'),lg=el('div');lg.id='log';w.append(lab('سجّل ما تلاحظه ليتحسن النظام:'),seg([['فاتني تنبيه',()=>$('fn').click()],['الخطوط غلط',()=>{$('bl').click();openSheet(false)}]]),seg([['سجل الأحداث',()=>$('logb').click()],['رفع الأحداث',()=>$('sync').click()]]),lg);return w}},
+ {t:'البيانات والتعلم',extra:()=>{const w=el('div'),lg=el('div');lg.id='log';w.append(lab('سجّل ما تلاحظه ليتحسن النظام:'),seg([['فاتني تنبيه',()=>$('fn').click()],['الخطوط غلط',()=>{$('bl').click();openSheet(false)}]]),seg([['سجل الأحداث',()=>$('logb').click()],['رفع الأحداث',()=>$('sync').click()]]),lab('بيانات تدريب الموديل:'),seg([['📸 لقطة',()=>Train.capture('manual')],['تسجيل تلقائي',()=>Train.toggle()]]),seg([['تصدير للتدريب',()=>Train.export()],['حذف اللقطات',()=>Train.clear()]]),lg);return w}},
  {t:'متقدم',items:[['showFps','toggle','عرض FPS'],['showConf','toggle','عرض الدقة والثقة']],extra:()=>seg([['نافذة المنظور (فحص)',()=>$('dbg').click()]])}];
 function renderSettings(){const b=$('sheetbody'),open=[...b.querySelectorAll('details[open]')].map(d=>d.firstChild.textContent);b.innerHTML='';
   for(const sec of SCHEMA){const d=el('details','sec');if(sec.open||open.includes(sec.t))d.open=true;d.append(el('summary','',sec.t));
