@@ -92,6 +92,7 @@ function initML(){if(mlInit)return;mlInit=true;(async()=>{   // الموديل: 
 async function loadML(buf,wasmOnly){try{
   if(typeof ort==='undefined')await loadScript('https://cdn.jsdelivr.net/npm/onnxruntime-web@1.18.0/dist/'+ORT_FILE);
   ort.env.wasm.wasmPaths='https://cdn.jsdelivr.net/npm/onnxruntime-web@1.18.0/dist/';ort.env.wasm.numThreads=1;
+  if(window.GPUAdapter&&!GPUAdapter.prototype.requestAdapterInfo)GPUAdapter.prototype.requestAdapterInfo=async function(){return this.info||{}};   // Chrome الحديث أزالها وORT 1.18 يستدعيها
   ml.sess=null;ml.ep='wasm';ml.buf=buf;
   if(navigator.gpu&&!wasmOnly){try{ml.sess=await ort.InferenceSession.create(buf,{executionProviders:['webgpu']});ml.ep='webgpu'}catch(e){ml.sess=null;ml.gpuErr=String(e.message||e).slice(0,90)}}   // كرت الشاشة أسرع بكثير
   if(!ml.sess)ml.sess=await ort.InferenceSession.create(buf,{executionProviders:['wasm']});
