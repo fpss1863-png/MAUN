@@ -93,10 +93,10 @@ async function loadML(buf,wasmOnly){try{
   if(typeof ort==='undefined')await loadScript('https://cdn.jsdelivr.net/npm/onnxruntime-web@1.18.0/dist/'+ORT_FILE);
   ort.env.wasm.wasmPaths='https://cdn.jsdelivr.net/npm/onnxruntime-web@1.18.0/dist/';ort.env.wasm.numThreads=1;
   ml.sess=null;ml.ep='wasm';ml.buf=buf;
-  if(navigator.gpu&&!wasmOnly){try{ml.sess=await ort.InferenceSession.create(buf,{executionProviders:['webgpu']});ml.ep='webgpu'}catch(e){ml.sess=null}}   // كرت الشاشة أسرع بكثير
+  if(navigator.gpu&&!wasmOnly){try{ml.sess=await ort.InferenceSession.create(buf,{executionProviders:['webgpu']});ml.ep='webgpu'}catch(e){ml.sess=null;ml.gpuErr=String(e.message||e).slice(0,90)}}   // كرت الشاشة أسرع بكثير
   if(!ml.sess)ml.sess=await ort.InferenceSession.create(buf,{executionProviders:['wasm']});
   ml.on=true;ml.fails=0;ml.pick=null;ml.gerr=0;
-  $('msg').textContent='موديل الذكاء جاهز ('+(ml.ep=='webgpu'?'كرت الشاشة':'المعالج')+').'}catch(e){ml.sess=null;$('msg').textContent='تعذر تحميل الموديل: '+String(e.message||e).slice(0,80)}}
+  $('msg').textContent='موديل الذكاء جاهز ('+(ml.ep=='webgpu'?'كرت الشاشة':'المعالج')+')'+(ml.ep=='webgpu'?'':(wasmOnly?' — رجعت للمعالج: '+(ml.err||''):!navigator.gpu?' — المتصفح لا يدعم WebGPU':' — فشل كرت الشاشة: '+(ml.gpuErr||'سبب غير معروف')))+'.'}catch(e){ml.sess=null;$('msg').textContent='تعذر تحميل الموديل: '+String(e.message||e).slice(0,80)}}
 function decodeUFLD(d,dims){const n=dims.length,G1=dims[n-3],R=dims[n-2],L=dims[n-1],G=G1-1,cw=799/(G-1),lanes=[];
   const anc=R==56?[...Array(56)].map((_,k)=>64+4*k):R==18?[121,131,141,151,161,171,181,191,201,211,221,231,241,251,261,271,281,287]
     :[...Array(R)].map((_,r)=>Math.round(288*(.4+.6*r/(R-1))));
