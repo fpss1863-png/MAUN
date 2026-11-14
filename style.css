@@ -100,3 +100,5 @@ button:active,.btn:active{transform:scale(.97)}button:hover,.btn:hover{border-co
 .photo{display:flex;gap:12px;align-items:center}.photo .pv{width:92px;height:62px;border-radius:12px;background:#202327 center/cover;flex:none}
 .acts{display:flex;gap:8px;margin-top:16px;flex-wrap:wrap}.acts .primary{flex:1;padding:11px}
 @media(prefers-reduced-motion:reduce){*{animation:none !important;transition:none !important}}
+#ppfloat{left:calc(62px + var(--sl))}
+.adv{margin:0 18px 10px}.adv>summary{cursor:pointer;color:var(--mu);font-size:13px;padding:8px 0}

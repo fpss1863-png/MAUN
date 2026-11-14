@@ -48,13 +48,15 @@ function resetState(){S.forEach(s=>Object.assign(s,{c:null,miss:0,rej:0,y:0,cov:
   acc.fill(0);calib=[];base=null;bad=0;lastOff=null;wasLost=false;laneW=BW/3;alertOn=false;earlyN=0;devPrev=0;okRun=0;crossN=[0,0]}
 function setCalib(p){pts=p;yF=Math.min(p[0][1],p[1][1])|0;yN=Math.max(p[2][1],p[3][1])|0;
   const d=[[BW/3,0],[BW*2/3,0],[BW*2/3,BH],[BW/3,BH]];Hi=homography(d,p);Hf=homography(p,d);buildBevMap();resetState()}
-function resetCalib(){pts=[];Hi=null;localStorage.removeItem(calKey);resetState();ah.fill(0);macc.fill(0);aN=0;aFr=0;
+let triedLast=false,tessA=null;
+function saveCal(p){const s=JSON.stringify(p);localStorage.setItem(calKey,s);localStorage.setItem('pts-last-'+calKey,s)}
+function resetCalib(){pts=[];Hi=null;triedLast=false;localStorage.removeItem(calKey);resetState();ah.fill(0);macc.fill(0);aN=0;aFr=0;
   if(auto){$('msg').textContent='معايرة تلقائية: سر على الطريق وخلّ الخطوط ظاهرة…';return}
   $('msg').textContent='اضغط 4 نقاط على خطي مسارك: 1 بعيد-يسار، 2 بعيد-يمين، 3 قريب-يمين، 4 قريب-يسار (فوق الكبوت).'}
 ov.addEventListener('pointerdown',e=>{if(Hi||!running||auto)return;
   const r=ov.getBoundingClientRect();pts.push([(e.clientX-r.left)/r.width*PW,(e.clientY-r.top)/r.height*PH]);
   if(pts.length==4){if(pts[0][1]<pts[3][1]&&pts[1][1]<pts[2][1]){
-      localStorage.setItem(calKey,JSON.stringify(pts));setCalib(pts);$('msg').textContent='تمت المعايرة.';if(src=='file')video.play()}
+      saveCal(pts);setCalib(pts);$('msg').textContent='تمت المعايرة.';if(src=='file')video.play()}
     else{pts=[];$('msg').textContent='الترتيب غلط: النقاط البعيدة لازم تكون أعلى. أعد المحاولة.'}}});
 
 // ---------- كاشف السيارات (COCO-SSD) ----------
@@ -64,7 +66,7 @@ function initModel(){initML();window.Yolo&&Yolo.init();if(modelP||!ST.detect||(w
   model=await cocoSsd.load({base:'lite_mobilenet_v2'})}catch(e){$('msg').textContent='تعذر تحميل كاشف السيارات (يحتاج نت أول مرة).'}})()}
 const iou=(a,b)=>{const x=Math.max(0,Math.min(a[0]+a[2],b[0]+b[2])-Math.max(a[0],b[0])),y=Math.max(0,Math.min(a[1]+a[3],b[1]+b[3])-Math.max(a[1],b[1])),i=x*y;return i/(a[2]*a[3]+b[2]*b[3]-i)};
 function runDet(){if(window.Yolo&&Yolo.active()){Yolo.run();return}if(!model||detBusy||!ST.detect)return;detBusy=true;
-  model.detect(pc,12,.45).then(r=>{r=r.filter(x=>x.score>=.5);r.forEach(x=>x.t=fn);window.Assist&&Assist.onDet(r);   // نحتفظ بالمربعات القديمة 10 فريمات عشان السيارة السريعة
+  model.detect(pc,12,.45).then(r=>{r=r.filter(x=>x.score>=.5&&!(window.Assist&&Assist.isOwn(x)));r.forEach(x=>x.t=fn);window.Assist&&Assist.onDet(r);   // نحتفظ بالمربعات القديمة 10 فريمات عشان السيارة السريعة
     dets=r.concat(dets.filter(o=>fn-o.t<10&&!r.some(n=>n.class==o.class&&iou(n.bbox,o.bbox)>.2)))}).catch(()=>{}).finally(()=>detBusy=false)}
 
 // ---------- موديل مسارات (UFLD v1 عبر ONNX Runtime Web) ----------
@@ -119,7 +121,7 @@ function mlCalStep(){if(!ml.pick||ml.t===mlLastT)return;mlLastT=ml.t;
   const vpy=(bR-bL)/(aL-aR),yn=Math.min(low,PH*C.NEAR),yf=vpy+.5*(yn-vpy),lx=y=>aL*y+bL,rx=y=>aR*y+bR;
   const p=[[lx(yf),yf],[rx(yf),yf],[rx(yn),yn],[lx(yn),yn]];
   if(!(aR>aL)||vpy<PH*.15||vpy>yn-30||rx(yn)-lx(yn)<PW*.22||rx(yn)-lx(yn)>PW*.9||p.some(([x,y])=>x<0||x>PW||y<0||y>PH))return;
-  localStorage.setItem(calKey,JSON.stringify(p));setCalib(p);$('msg').textContent='تمت المعايرة بالذكاء الاصطناعي.'}
+  saveCal(p);setCalib(p);$('msg').textContent='تمت المعايرة بالذكاء الاصطناعي.'}
 
 // ---------- لوحات السرعة ----------
 const cropC=document.createElement('canvas');cropC.width=cropC.height=96;
@@ -139,6 +141,8 @@ function findSign(d){ // دائرة حمراء بوسط فاتح في الجزء
       if(isR(i))red++;else if(d[i]>150&&d[i+1]>150&&d[i+2]>150)wh++}
     if(n&&red/n<.2&&wh/n>.35)return{x:bx,y:by,w:bw,h:bh}}
   return null}
+let ocrN=0;
+function toWestern(s){return parseInt(String(s).replace(/[٠-٩]/g,c=>c.charCodeAt(0)-1632).replace(/[۰-۹]/g,c=>c.charCodeAt(0)-1776).replace(/\D/g,''))}
 async function ocr(b){if(ocrBusy||video.videoWidth==0)return;ocrBusy=true;
   try{if(!window.Tesseract)await loadScript('https://cdn.jsdelivr.net/npm/tesseract.js@5.1.1/dist/tesseract.min.js');
     if(!tess){tess=await Tesseract.createWorker('eng');await tess.setParameters({tessedit_char_whitelist:'0123456789',tessedit_pageseg_mode:'7'})}
@@ -146,7 +150,9 @@ async function ocr(b){if(ocrBusy||video.videoWidth==0)return;ocrBusy=true;
     cx.drawImage(video,(b.x+b.w*.18)*sx,(b.y+b.h*.18)*sy,b.w*.64*sx,b.h*.64*sy,0,0,96,96);
     const im=cx.getImageData(0,0,96,96);for(let i=0;i<im.data.length;i+=4){const v=(im.data[i]+im.data[i+1]+im.data[i+2])/3<105?0:255;im.data[i]=im.data[i+1]=im.data[i+2]=v}
     cx.putImageData(im,0,0);
-    const{data}=await tess.recognize(cropC),v=parseInt(data.text.replace(/\D/g,''));
+    let v=toWestern((await tess.recognize(cropC)).data.text);
+    if(!(v>=20&&v<=140&&v%10==0)&&(ocrN++&1)){if(!tessA){tessA=await Tesseract.createWorker('ara');await tessA.setParameters({tessedit_char_whitelist:'٠١٢٣٤٥٦٧٨٩0123456789',tessedit_pageseg_mode:'7'})}
+      v=toWestern((await tessA.recognize(cropC)).data.text)}
     const t=performance.now();
     if(v>=20&&v<=140&&v%10==0){reads.push([v,t]);reads=reads.filter(r=>t-r[1]<4000);
       if(reads.filter(r=>r[0]==v).length>=2){limit=v;limitT=t}}
@@ -253,7 +259,7 @@ function step(){
     const n=accept(s.c,r&&r.c,s.rej);s.rej=(r&&!n)?s.rej+1:0;if(r&&!n)qD++;
     if(n){s.c=blend(s.c,n);s.miss=0;s.cov=.8*s.cov+.2*r.cov;s.y=.8*s.y+.2*r.y;s.seen=true;s.ml=!!r.ml}
     else{s.seen=false;if(!frz&&++s.miss>C.MISS)s.c=null}s.frz=frz}
-  const A=S[0],B=S[1];if(A.seen&&B.seen)qS++;tuneStep();clarity=clarity*.93+.07*((A.seen?.5:0)+(B.seen?.5:0));
+  const A=S[0],B=S[1];if(A.seen&&B.seen)qS++;tuneStep();clarity=clarity*.93+.07*(A.seen&&B.seen?1:(A.seen||B.seen)?.7:0);
   if(A.c&&B.c){const w0=xat(B.c,0)-xat(A.c,0),w1=xat(B.c,BH)-xat(A.c,BH),r0=BW/3;   // الخطين لازم يكوّنون مسار منطقي
     if(w1<.55*r0||w1>1.7*r0||w0<.4*r0||w0>2*r0){const dr=A.cov<B.cov?A:B;dr.c=null;dr.seen=false;dr.miss=99;qD++}}
   // تغيير مسار: إذا عبرنا خطاً (صار مركز السيارة بعده) ننقل الأدوار بدل التمسك بالمسار القديم
@@ -357,18 +363,28 @@ function finishAuto(){let mL=0,mR=0,bl=null,br=null;
   for(let bi=0;bi<ANB;bi++)for(let ni=0;ni<ANN;ni++){const[b,xn,v]=cell(bi,ni);
     if(mL>25&&xn<b-10&&xn<PW*.5&&v>=.5*mL&&(!bl||xn>bl.xn))bl={b,xn};
     if(mR>25&&xn>b+10&&xn>PW*.5&&v>=.5*mR&&(!br||xn<br.xn))br={b,xn}}
-  const fail=()=>{if(aN>=40){auto=false;resetCalib();$('msg').textContent='ما قدرت أعاير تلقائياً. عايِر يدوياً (4 نقاط).'}};
-  if(!bl||!br)return fail();
+  const fail=()=>{if(aN>=40){const g=localStorage.getItem('pts-last-'+calKey);aN=0;ah.fill(0);macc.fill(0);
+    if(g&&!triedLast){triedLast=true;try{setCalib(JSON.parse(g));$('msg').textContent='تعذرت المعايرة التلقائية؛ استخدمت آخر معايرة ناجحة. اضغط «تلقائية» لإعادة المحاولة.';return}catch(x){}}
+    $('msg').textContent='تعذرت المعايرة التلقائية. سر على طريق فيه خطوط واضحة، أو اختر المعايرة اليدوية.'}};
+  if(bl&&br&&!(br.b-bl.b>4&&br.xn-bl.xn>PW*.22)){if(mL>=3*mR)br=null;else if(mR>=3*mL)bl=null}   // زوج غير منطقي (خطان يتقاطعان): نثق بالأقوى فقط
+  let approx=false;
+  if(!bl||!br){const left=!!bl,P=bl||br;   // خط واحد واضح فقط: نستنتج الثاني بمرآة حول نقطة التلاشي (معايرة تقريبية)
+    if(aN>=24&&P){let S2=null;
+      for(let bi=0;bi<ANB;bi++)for(let ni=0;ni<ANN;ni++){const[b,xn,v]=cell(bi,ni),side=left?(xn<b-10&&xn<PW*.5):(xn>b+10&&xn>PW*.5);
+        if(side&&v>=.4*(left?mL:mR)&&Math.abs(xn-P.xn)>=30&&(!S2||(left?xn<S2.xn:xn>S2.xn)))S2={b,xn}}
+      let vx=PW/2;if(S2){const u=(S2.b-P.b)/((P.xn-P.b)-(S2.xn-S2.b)),yy=AY0+u*(AY1-AY0);if(isFinite(yy)&&yy>PH*.15&&yy<AY0-4)vx=P.b+(P.xn-P.b)*u}
+      const Q={b:2*vx-P.b,xn:2*vx-P.xn};if(left)br=Q;else bl=Q;approx=true}
+    else return fail()}
   const den=(br.xn-br.b)-(bl.xn-bl.b),w0=br.b-bl.b,vpy=AY0+(-w0/den)*(AY1-AY0);
   if(den<=0||vpy<PH*.15||vpy>AY0-4||br.xn-bl.xn<PW*.22||br.xn-bl.xn>PW*.9)return fail();
   const lx=y=>bl.b+(bl.xn-bl.b)*(y-AY0)/(AY1-AY0),rx=y=>br.b+(br.xn-br.b)*(y-AY0)/(AY1-AY0);
   const sup=new Float32Array(PH);   // أين تنتهي الخطوط من تحت؟ (الكبوت)
   for(let y=AY0;y<AY1;y++){let c=0;for(const x0 of[lx(y),rx(y)])for(let x=Math.round(x0)-3;x<=Math.round(x0)+3;x++)if(x>=0&&x<PW&&macc[y*PW+x]>2)c++;sup[y]=c}
   let yn=AY0+10;for(let y=AY1-1;y>AY0+10;y--){let t=0;for(let k=0;k<6;k++)t+=sup[y-k];if(t>=4){yn=y-4;break}}
-  const yf=Math.round(vpy+.5*(yn-vpy));if(yn-yf<25)return fail();
+  let yf=Math.round(vpy+.5*(yn-vpy));if(yn-yf<25)yf=yn-25;if(yf<=vpy+8)return fail();
   const p=[[lx(yf),yf],[rx(yf),yf],[rx(yn),yn],[lx(yn),yn]];
   if(p.some(([x,y])=>x<0||x>PW||y<0||y>PH))return fail();
-  localStorage.setItem(calKey,JSON.stringify(p));setCalib(p);$('msg').textContent='تمت المعايرة تلقائياً.'}
+  saveCal(p);setCalib(p);$('msg').textContent=approx?'تمت المعايرة تلقائياً (تقريبية). للدقة الأعلى استخدم المعايرة اليدوية.':'تمت المعايرة تلقائياً.'}
 
 // ---------- مصادر الفيديو ----------
 function stopSrc(){video.pause();const s=video.srcObject;if(s)s.getTracks().forEach(t=>t.stop());
@@ -379,7 +395,7 @@ function loadCal(){const saved=localStorage.getItem(calKey);
 $('start').onclick=async()=>{
   try{actx=actx||new (window.AudioContext||window.webkitAudioContext)();stopSrc();src='cam';calKey='pts-cam-'+Cars.activeId();
     const s=await navigator.mediaDevices.getUserMedia({video:Object.assign({width:{ideal:ST.camH*16/9|0},height:{ideal:ST.camH},frameRate:{ideal:ST.camFps}},ST.camId?{deviceId:{exact:ST.camId}}:{facingMode:{ideal:'environment'}}),audio:false});
-    video.loop=false;video.srcObject=s;await video.play();running=true;$('pp').style.display='none';UI.hideIntro();
+    video.loop=false;video.srcObject=s;await video.play();running=true;UI.src('cam');UI.hideIntro();
     setAR(16/9);initModel();
     try{await navigator.wakeLock.request('screen')}catch(e){}
     try{gpsId=navigator.geolocation.watchPosition(p=>{gpsT=performance.now();gpsAcc=p.coords.accuracy;spd=p.coords.speed!=null?Math.round(p.coords.speed*3.6):null;window.Radar&&Radar.pos(p.coords)},()=>{},{enableHighAccuracy:true})}catch(e){}
@@ -387,11 +403,11 @@ $('start').onclick=async()=>{
   }catch(e){$('msg').textContent='ما اشتغلت الكاميرا: '+e.message+' (لازم https وإذن الكاميرا)'}};
 $('file').onchange=e=>{const f=e.target.files[0];if(!f)return;
   actx=actx||new (window.AudioContext||window.webkitAudioContext)();stopSrc();src='file';calKey='pts-file-'+f.name;
-  video.muted=true;video.loop=true;video.src=URL.createObjectURL(f);running=true;$('pp').style.display='';UI.hideIntro();
+  video.muted=true;video.loop=true;video.src=URL.createObjectURL(f);running=true;UI.src('file');UI.hideIntro();
   video.onloadedmetadata=()=>{setAR(video.videoWidth/video.videoHeight);video.currentTime=.5;
     if(loadCal()||auto)video.play();else video.pause()};initModel()};
 $('pp').onclick=()=>video.paused?video.play():video.pause();
-$('cal').onclick=()=>{if(running){auto=true;resetCalib()}};
+$('cal').onclick=()=>{if(running){auto=true;resetCalib();if(src==='file')video.play()}else $('msg').textContent='ابدأ الكاميرا أو افتح فيديو أولاً'};
 $('man').onclick=()=>{if(running){auto=false;resetCalib();if(src=='file')video.pause()}};
 $('cam').onclick=$('start').onclick;
 document.addEventListener('click',e=>{const b=e.target.closest('#log button[data-i]');if(b)learn(+b.dataset.i,b.dataset.l)});

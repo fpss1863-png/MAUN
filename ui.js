@@ -18,7 +18,7 @@ const ST=Object.assign({},DEF);
 Object.defineProperty(ST,'detect',{get(){return !!(this.cars||this.signs)}});
 window.setAR=r=>{UI.ar=r;const w=$('camwrap');w.style.aspectRatio=String(r);w.style.width=ST.fit==='contain'?`min(100vw,calc(100dvh*${r}))`:`max(100vw,calc(100dvh*${r}))`};
 window.SENSF=()=>({low:1.25,mid:1,high:.8}[ST.sens]||1);
-const loadST=id=>{let o={};try{o=JSON.parse(localStorage.getItem('maun_set_'+(id||'default'))||'{}')}catch(e){}Object.assign(ST,DEF,o)};
+const loadST=id=>{let o={};try{o=JSON.parse(localStorage.getItem('maun_set_'+(id||'default'))||'{}')}catch(e){}Object.assign(ST,DEF,o);if(/pip |yolo |export /i.test(ST.yoloNames||''))ST.yoloNames=''};
 const saveST=()=>{try{localStorage.setItem('maun_set_'+Cars.activeId(),JSON.stringify(ST))}catch(e){}};
 
 // ============ الصوت: هادئ، قابل للتخصيص، بدون تكرار مزعج ============
@@ -77,6 +77,11 @@ const Assist={tr:[],nid:1,lead:null,leadM:null,dark:false,stopSince:0,armed:fals
       if(!best){best={id:this.nid++,cls:v.class,h:[],miss:0,score:v.score};this.tr.push(best)}
       best.hit=true;best.miss=0;best.score=.7*best.score+.3*v.score;best.h.push({t:now,x,y,w,h});if(best.h.length>26)best.h.shift()}
     this.tr.forEach(t=>{if(!t.hit)t.miss++});this.tr=this.tr.filter(t=>t.miss<=4&&now-t.h[t.h.length-1].t<1500)},
+  isOwn(d){const[x,y,w,h]=d.bbox,hood=Math.max(Hi?yN:PH*.8,PH*.62),cx=x+w/2,cy=y+h/2;
+    return cy>hood-PH*.01||(y+h>hood+PH*.04&&w>PW*.3&&Math.abs(cx-PW/2)<PW*.3)},     // مركز الصندوق داخل غطاء سيارتك، أو صندوق ضخم يتجاوزه
+  staticOwn(t,now){if(!spdOK()||spd<25)return false;const H=t.h.filter(p=>now-p.t<3500);if(H.length<8||H[H.length-1].t-H[0].t<2500)return false;
+    const r=f=>Math.max(...H.map(f))-Math.min(...H.map(f)),mw=H.reduce((s,p)=>s+p.w,0)/H.length;
+    return r(p=>p.w)/mw<.04&&r(p=>p.y+p.h)<PH*.012&&r(p=>p.x+p.w/2)<PW*.015},       // صندوق ثابت تماماً وأنت تسير = جزء من سيارتك
   vpY(){if(!pts||pts.length<4)return null;const[l0,r0,r1,l1]=pts,a1=(l1[0]-l0[0])/(l1[1]-l0[1]),b1=l0[0]-a1*l0[1],a2=(r1[0]-r0[0])/(r1[1]-r0[1]),b2=r0[0]-a2*r0[1];
     if(!isFinite(a1)||!isFinite(a2)||Math.abs(a1-a2)<1e-6)return null;const y=(b2-b1)/(a1-a2);return y>0&&y<PH?y:null},
   metrics(t,now){const H=t.h.filter(p=>now-p.t<1600);if(H.length<5)return null;const L=H[H.length-1];if((L.t-H[0].t)<1000)return null;
@@ -95,7 +100,7 @@ const Assist={tr:[],nid:1,lead:null,leadM:null,dark:false,stopSince:0,armed:fals
   update(){const now=performance.now();if(++this.df%30==0)this.checkDark();
     if(!ST.cars||!this.tr.length){this.lead=this.leadM=null;if(ST.leadmove)this.checkLead(null,null,now);return}
     const lowConf=!(Hi&&!wasLost&&(S[0].c||S[1].c))||clarity<.4;let lead=null,lm=null;
-    for(const t of this.tr){const m=this.metrics(t,now);t.m=m;if(!m)continue;t.rel=this.rel(m);
+    for(const t of this.tr){if(t.own||(t.own=this.staticOwn(t,now)))continue;const m=this.metrics(t,now);t.m=m;if(!m)continue;t.rel=this.rel(m);
       if(t.rel!=null){t.relH=(t.relH||[]).concat([{t:now,r:t.rel}]).filter(p=>now-p.t<1400);
         if(t.rel>.2&&t.rel<.8)t.inN=Math.min(6,(t.inN||0)+1);else if(t.rel<.08||t.rel>.92)t.inN=0;else t.inN=Math.max(0,(t.inN||0)-1);t.inLane=t.inN>=3}   // ثبات: لازم تبقى داخل المسار عدة قراءات
       else t.inLane=Math.abs(m.cx-PW/2)<PW*.14&&m.by>PH*.6&&m.big;
@@ -133,7 +138,7 @@ const Assist={tr:[],nid:1,lead:null,leadM:null,dark:false,stopSince:0,armed:fals
         c.fillStyle='rgba(8,9,10,.7)';rr(c,L.x*k,L.y*k-28,w,24,12);c.fill();c.fillStyle='#e9ebee';c.fillText(lab,L.x*k+9,L.y*k-11)}}}};
 window.Assist=Assist;
 // ---- صياغة رسمية لحالة القراءة ----
-const FORMAL=[[/^تمام$/,'قراءة واضحة','ok'],[/^(خط واحد|من الذاكرة|لا توجد خطوط|فقدت الخطوط)/,'قراءة غير واضحة','idle'],[/انحراف نحو اليمين/,'انحراف نحو اليمين','alert'],[/انحراف نحو اليسار/,'انحراف نحو اليسار','alert'],
+const FORMAL=[[/^تمام$/,'قراءة واضحة','ok'],[/^خط واحد$/,'قراءة واضحة','ok'],[/^(من الذاكرة|لا توجد خطوط|فقدت الخطوط)/,'قراءة غير واضحة','idle'],[/انحراف نحو اليمين/,'انحراف نحو اليمين','alert'],[/انحراف نحو اليسار/,'انحراف نحو اليسار','alert'],
   [/اقتربت من خط اليمين/,'اقتراب من الخط الأيمن','warn'],[/اقتربت من خط اليسار/,'اقتراب من الخط الأيسر','warn'],[/يتعلم وضعك/,'جارٍ تهيئة القراءة','idle'],[/معايرة تلقائية/,'جارٍ المعايرة','idle'],
   [/عايِر المسار/,'يرجى معايرة المسار','idle'],[/تغيير مسار/,'تغيير مسار','warn'],[/متوقف/,'تحليل المسارات متوقف','idle']];
 let flashP=null,_paint='',_raw=['جاهز',false];
@@ -149,7 +154,9 @@ window.Radar=Radar;
 const ORT_BASE='https://cdn.jsdelivr.net/npm/onnxruntime-web@1.18.0/dist/';
 const COCO=['person','bicycle','car','motorcycle','airplane','bus','train','truck','boat','traffic light','fire hydrant','stop sign','parking meter','bench','bird','cat','dog','horse','sheep','cow','elephant','bear','zebra','giraffe','backpack','umbrella','handbag','tie','suitcase','frisbee','skis','snowboard','sports ball','kite','baseball bat','baseball glove','skateboard','surfboard','tennis racket','bottle','wine glass','cup','fork','knife','spoon','bowl','banana','apple','sandwich','orange','broccoli','carrot','hot dog','pizza','donut','cake','chair','couch','potted plant','bed','dining table','toilet','tv','laptop','mouse','remote','keyboard','cell phone','microwave','oven','toaster','sink','refrigerator','book','clock','vase','scissors','teddy bear','hair drier','toothbrush'];
 const Yolo={sess:null,busy:false,ms:0,layout:'',nc:0,err:'',fails:0,lastOcr:0,_i:0,
-  names(){const t=(ST.yoloNames||'').trim();return t?t.split(/[,\n]+/).map(s=>s.trim()).filter(Boolean):COCO},
+  names(nc0){const n0=nc0||this.nc,t=(ST.yoloNames||'').trim();if(!t)return COCO;const a=t.split(/[,\n،]+/).map(s=>s.trim()).filter(Boolean);
+    if(a.length>200||a.some(s=>s.length>40||/\b(pip|yolo|install|export|model=)\b/i.test(s)))return COCO;      // نص غير صالح (مثل أمر الطرفية) نتجاهله
+    if(n0&&a.length!==n0)return n0===80?COCO:Array.from({length:n0},(_,i)=>a[i]||'cls'+i);return a},
   active(){return !!(this.sess&&ST.yolo&&ST.detect)},
   init(){if(this._i)return;this._i=1;idbGet('yolo').then(b=>b&&this.load(b)).catch(()=>{})},
   async load(buf){try{if(typeof ort==='undefined')await loadScript(ORT_BASE+'ort.min.js');ort.env.wasm.wasmPaths=ORT_BASE;ort.env.wasm.numThreads=1;
@@ -166,10 +173,10 @@ const Yolo={sess:null,busy:false,ms:0,layout:'',nc:0,err:'',fails:0,lastOcr:0,_i
     catch(e){this.err=String(e.message||e).slice(0,70);const L=[640,480,416,320];ST.yoloSize=L[(L.indexOf(ST.yoloSize)+1)%4];   // غالباً حجم المدخل غلط: نجرّب غيره
       if(++this.fails>=8){ST.yolo=0;saveST();$('msg').textContent='YOLO ما اشتغل ('+this.err+'). رجعت لـ COCO-SSD.';renderSettings();initModel()}}
     this.busy=false},
-  decode(d,dims,g){const nm=this.names(),cf=ST.yoloConf,out=[],k=PW/g.vw,box=(x1,y1,x2,y2)=>[(x1-g.px)/g.r*k,(y1-g.py)/g.r*k,(x2-x1)/g.r*k,(y2-y1)/g.r*k],n=dims.length,a=dims[n-2],b=dims[n-1];
+  decode(d,dims,g){let nm=this.names();const cf=ST.yoloConf,out=[],k=PW/g.vw,box=(x1,y1,x2,y2)=>[(x1-g.px)/g.r*k,(y1-g.py)/g.r*k,(x2-x1)/g.r*k,(y2-y1)/g.r*k],n=dims.length,a=dims[n-2],b=dims[n-1];
     if(b===6&&a<=2000){this.layout='end2end';                      // مخرجات بدون NMS: [x1,y1,x2,y2,score,class]
       for(let i=0;i<a;i++){const o=i*6,sc=d[o+4];if(sc<cf)continue;const c=d[o+5]|0;out.push({class:nm[c]||'cls'+c,score:sc,bbox:box(d[o],d[o+1],d[o+2],d[o+3])})}return out}
-    const feat=a<b,C=feat?a:b,A=feat?b:a,nc=C-4;this.layout=feat?'v8':'v8-T';this.nc=nc;        // [4+nc, anchors] (YOLOv8/11)
+    const feat=a<b,C=feat?a:b,A=feat?b:a,nc=C-4;this.layout=feat?'v8':'v8-T';this.nc=nc;nm=this.names(nc);        // [4+nc, anchors] (YOLOv8/11)
     const at=(c,i)=>feat?d[c*A+i]:d[i*C+c],cand=[];
     for(let i=0;i<A;i++){let best=0,bc=-1;for(let c=0;c<nc;c++){const s=at(4+c,i);if(s>best){best=s;bc=c}}
       if(best<cf)continue;const cx=at(0,i),cy=at(1,i),w=at(2,i),h=at(3,i);cand.push({bc,best,x1:cx-w/2,y1:cy-h/2,x2:cx+w/2,y2:cy+h/2})}
@@ -178,7 +185,7 @@ const Yolo={sess:null,busy:false,ms:0,layout:'',nc:0,err:'',fails:0,lastOcr:0,_i
       for(const q of keep){if(q.bc!==c.bc)continue;const ix=Math.max(0,Math.min(q.x2,c.x2)-Math.max(q.x1,c.x1)),iy=Math.max(0,Math.min(q.y2,c.y2)-Math.max(q.y1,c.y1)),i=ix*iy,u=(q.x2-q.x1)*(q.y2-q.y1)+(c.x2-c.x1)*(c.y2-c.y1)-i;if(i/u>.5){ok=false;break}}
       if(ok)keep.push(c)}
     for(const c of keep)out.push({class:nm[c.bc]||'cls'+c.bc,score:c.best,bbox:box(c.x1,c.y1,c.x2,c.y2)});return out},
-  post(r){r.forEach(x=>x.t=fn);Assist.onDet(r);
+  post(r){r=r.filter(x=>!Assist.isOwn(x));r.forEach(x=>x.t=fn);Assist.onDet(r);
     dets=r.concat(dets.filter(o=>fn-o.t<10&&!r.some(n=>n.class==o.class&&iou(n.bbox,o.bbox)>.2)));
     if(ST.speedSign&&!ocrBusy&&performance.now()-this.lastOcr>800){const s=r.find(x=>/speed|limit|سرعة/i.test(x.class));   // لوحة سرعة مكتشفة → نقرأ رقمها
       if(s){this.lastOcr=performance.now();const[x,y,w,h]=s.bbox;ocr({x,y,w,h})}}}};
@@ -209,6 +216,7 @@ function stepLite(){fn++;if(ST.detect)runDet();
 // ============ الواجهة ============
 let lc=0;
 const UI={_k:'',ar:16/9,
+  src(s){$('ppfloat').hidden=s!=='file'},
   hideIntro(){const i=$('intro');if(i.dataset.out)return;i.dataset.out=1;i.classList.add('out');setTimeout(()=>{i.style.display='none'},520)},
   flash(text,level,ms){flashP={text,level,until:performance.now()+ms};paint();setTimeout(paint,ms+40)},
 
@@ -262,15 +270,19 @@ const SCHEMA=[
    extra:()=>{const w=el('div'),r=el('div','srow'),sel=el('select');sel.id='camsel';sel.add(new Option('الخلفية (افتراضي)',''));r.append(el('span','','الكاميرا'),sel);
      sel.onchange=()=>{ST.camId=sel.value;changed('camId')};
      navigator.mediaDevices&&navigator.mediaDevices.enumerateDevices().then(a=>{a.filter(d=>d.kind==='videoinput').forEach((d,i)=>sel.add(new Option(d.label||'كاميرا '+(i+1),d.deviceId)));sel.value=ST.camId}).catch(()=>{});
-     const pp=el('button','','إيقاف / تشغيل الفيديو');pp.id='ppvis';pp.style.cssText='display:none;margin:0 18px 10px';pp.onclick=()=>$('pp').click();
+     
      const st=el('div','note');st.id='calstat';
-     w.append(lab('مصدر الصورة'),seg([['الكاميرا',()=>{$('cam').click();openSheet(false)}],['فحص فيديو',()=>$('file').click()]]),pp,r,lab('المعايرة'),seg([['تلقائية',()=>{$('cal').click();openSheet(false)}],['يدوية',()=>{$('man').click();openSheet(false)}]]),st);return w}},
- {t:'نماذج الذكاء',items:[['yolo','toggle','استخدام YOLO بدل COCO-SSD'],['yoloSize','select','حجم مدخل YOLO',[[320,'320'],[416,'416'],[480,'480'],[640,'640']]],['yoloConf','select','حد الثقة',[[.25,'0.25'],[.35,'0.35'],[.45,'0.45'],[.55,'0.55']]]],
-   extra:()=>{const w=el('div'),f=el('input'),st=el('div','note'),ta=el('textarea');f.type='file';f.accept='.onnx';f.hidden=true;st.id='yolostat';st.textContent='لا يوجد موديل YOLO محمّل.';
-     ta.placeholder='أسماء فئات YOLO مفصولة بفاصلة (فاضية = COCO)';ta.value=ST.yoloNames;ta.style.cssText='width:calc(100% - 36px);margin:0 18px 8px;min-height:54px;background:var(--p2);border:1px solid var(--line);border-radius:10px;padding:8px;font-size:12px;direction:ltr;color:var(--tx)';ta.onchange=()=>{ST.yoloNames=ta.value;changed('yoloNames')};
+     w.append(lab('مصدر الصورة'),seg([['الكاميرا',()=>{$('cam').click();openSheet(false)}],['فحص فيديو',()=>{$('file').click();openSheet(false)}]]),r,lab('المعايرة'),seg([['تلقائية',()=>{$('cal').click();openSheet(false)}],['يدوية',()=>{$('man').click();openSheet(false)}]]),st);return w}},
+ {t:'نماذج الذكاء',items:[['yolo','toggle','استخدام YOLO بدل COCO-SSD'],['yoloSize','select','حجم مدخل YOLO',[[320,'320'],[416,'416'],[480,'480'],[640,'640']]],['yoloConf','select','حد الثقة',[[.25,'0.25'],[.3,'0.30'],[.35,'0.35'],[.4,'0.40'],[.45,'0.45'],[.5,'0.50'],[.55,'0.55']]]],
+   extra:()=>{const w=el('div'),f=el('input'),st=el('div','note'),ta=el('textarea'),dn=el('details','adv');f.type='file';f.accept='.onnx';f.hidden=true;st.id='yolostat';st.textContent='لا يوجد موديل YOLO محمّل.';
+     const cmd='pip install ultralytics\nyolo export model=yolo11n.pt format=onnx imgsz=640 opset=12 simplify=True';
+     ta.placeholder='car,truck,speed limit';ta.value=ST.yoloNames;ta.style.cssText='width:calc(100% - 36px);margin:0 18px 8px;min-height:54px;background:var(--p2);border:1px solid var(--line);border-radius:10px;padding:8px;font-size:12px;direction:ltr;color:var(--tx)';
+     ta.onchange=()=>{ST.yoloNames=ta.value;changed('yoloNames')};
      f.onchange=async()=>{const x=f.files[0];if(!x)return;$('msg').textContent='جاري قراءة الموديل…';const b=await x.arrayBuffer();try{await idbSet('yolo',b)}catch(e){}Yolo.load(b)};
-     w.append(lab('YOLO'),seg([['من ملف',()=>f.click()],['من رابط',async()=>{const u=prompt('رابط ملف ONNX (YOLOv8/11)');if(!u)return;try{$('msg').textContent='جاري التنزيل…';const b=await(await fetch(u)).arrayBuffer();try{await idbSet('yolo',b)}catch(e){}Yolo.load(b)}catch(e){$('msg').textContent='فشل التنزيل: '+e.message}}],
-       ['حذف',()=>{Yolo.sess=null;try{idbSet('yolo',null)}catch(e){}$('msg').textContent='تم حذف موديل YOLO.';if(ST.detect)initModel()}]]),f,ta,st,
+     dn.append(el('summary','','أسماء الفئات (متقدم)'),lab('اتركه فاضياً للموديل الجاهز. لا تكتب فيه أوامر. اكتبه فقط لو درّبت موديلك: أسماء الفئات مفصولة بفاصلة بنفس ترتيب التدريب.'),ta,seg([['استعادة الافتراضي (COCO)',()=>{ta.value='';ST.yoloNames='';changed('yoloNames')}]]));
+     w.append(lab('الخطوة 1: صدّر الموديل على الكمبيوتر'),seg([['نسخ أمر التصدير',()=>{navigator.clipboard?navigator.clipboard.writeText(cmd).then(()=>$('msg').textContent='تم نسخ الأمر. الصقه في الطرفية على الكمبيوتر.').catch(()=>$('msg').textContent=cmd):$('msg').textContent=cmd}]]),
+       lab('الخطوة 2: حمّل ملف yolo11n.onnx هنا'),seg([['من ملف',()=>f.click()],['من رابط',async()=>{const u=prompt('رابط ملف ONNX (YOLOv8/11)');if(!u)return;try{$('msg').textContent='جاري التنزيل…';const b=await(await fetch(u)).arrayBuffer();try{await idbSet('yolo',b)}catch(e){}Yolo.load(b)}catch(e){$('msg').textContent='فشل التنزيل: '+e.message}}],
+       ['حذف',()=>{Yolo.sess=null;try{idbSet('yolo',null)}catch(e){}$('msg').textContent='تم حذف موديل YOLO.';if(ST.detect)initModel()}]]),f,st,dn,
        lab('موديل المسارات (UFLD v1)'),seg([['من ملف',()=>$('mlf').click()],['من رابط',()=>$('mlu').click()],['تشغيل / إيقاف',()=>$('mlt').click()]]));return w}},
  {t:'البيانات والتعلم',extra:()=>{const w=el('div'),lg=el('div');lg.id='log';w.append(lab('سجّل ما تلاحظه ليتحسن النظام:'),seg([['فاتني تنبيه',()=>$('fn').click()],['الخطوط غلط',()=>{$('bl').click();openSheet(false)}]]),seg([['سجل الأحداث',()=>$('logb').click()],['رفع الأحداث',()=>$('sync').click()]]),lg);return w}},
  {t:'متقدم',items:[['showFps','toggle','عرض FPS'],['showConf','toggle','عرض الدقة والثقة']],extra:()=>seg([['نافذة المنظور (فحص)',()=>$('dbg').click()]])}];
@@ -278,11 +290,11 @@ function renderSettings(){const b=$('sheetbody'),open=[...b.querySelectorAll('de
   for(const sec of SCHEMA){const d=el('details','sec');if(sec.open||open.includes(sec.t))d.open=true;d.append(el('summary','',sec.t));
     for(const[k,type,label,opts]of(sec.items||[])){const row=el('div','srow');row.append(el('span','',label));
       if(type==='toggle'){const sw=el('button','sw'+(ST[k]?' on':''));sw.setAttribute('role','switch');sw.onclick=()=>{ST[k]=ST[k]?0:1;sw.classList.toggle('on',!!ST[k]);changed(k)};row.append(sw)}
-      else if(type==='select'){const s=el('select');for(const[v,t]of opts)s.add(new Option(t,v));s.value=String(ST[k]);s.onchange=()=>{ST[k]=isNaN(+s.value)||s.value===''?s.value:+s.value;changed(k)};row.append(s)}
+      else if(type==='select'){const s=el('select');for(const[v,t]of opts)s.add(new Option(t,v));s.value=String(ST[k]);if(s.value===''&&ST[k]!==''){s.add(new Option(String(ST[k]),ST[k]));s.value=String(ST[k])}s.onchange=()=>{ST[k]=isNaN(+s.value)||s.value===''?s.value:+s.value;changed(k)};row.append(s)}
       else{const r=el('input');r.type='range';[r.min,r.max,r.step]=opts;r.value=ST[k];r.onchange=()=>{ST[k]=+r.value;changed(k)};row.append(r)}
       d.append(row)}
     if(sec.extra)d.append(sec.extra());b.append(d)}}
-function refreshSheet(){const p=$('ppvis');if(p)p.style.display=src==='file'?'':'none';const c=$('calstat');if(c)c.textContent=Hi?`معايرة سارية — ثقة المسار ${Math.round(lc*100)}%`:'غير معايَر';renderChip()}
+function refreshSheet(){const c=$('calstat');if(c)c.textContent=Hi?`معايرة سارية — ثقة المسار ${Math.round(lc*100)}%`:'غير معايَر';renderChip()}
 const openSheet=o=>{$('sheet').classList.toggle('on',o);$('scrim').classList.toggle('on',o);if(o)refreshSheet()};
 
 // ============ ملفات السيارات ============
@@ -365,7 +377,9 @@ function renderAcct(host){const a=host||$('acct');a.innerHTML='';
   i.onclick=go((e,p)=>Cloud.signIn(e,p));u.onclick=go((e,p)=>Cloud.signUp(e,p));a.append(em,pw,i,u,m)}
 
 // ============ تشغيل ============
-$('gear').onclick=()=>openSheet(true);$('sheetx').onclick=()=>openSheet(false);$('scrim').onclick=()=>openSheet(false);
+$('gear').onclick=()=>openSheet(true);
+const ppIcon=()=>{$('ppfloat').innerHTML=video.paused?'<svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>':'<svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M6 5h4v14H6zM14 5h4v14h-4z"/></svg>'};
+$('ppfloat').onclick=()=>{video.paused?video.play():video.pause()};video.addEventListener('play',ppIcon);video.addEventListener('pause',ppIcon);ppIcon();$('sheetx').onclick=()=>openSheet(false);$('scrim').onclick=()=>openSheet(false);
 $('carsx').onclick=closeCars;$('sync').onclick=()=>Cloud.syncEvents();
 $('dbg').addEventListener('click',()=>{});
 (()=>{const m=$('msg');let t;new MutationObserver(()=>{m.classList.add('show');clearTimeout(t);t=setTimeout(()=>m.classList.remove('show'),6500)}).observe(m,{childList:true,characterData:true,subtree:true})})();
