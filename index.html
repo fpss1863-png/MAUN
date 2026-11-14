@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <title>MAUN</title>
-<meta name="theme-color" content="#050506">
+<meta name="theme-color" content="#000000">
 <meta name="apple-mobile-web-app-capable" content="yes"><meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"><meta name="apple-mobile-web-app-title" content="MAUN">
 <link rel="manifest" href="manifest.webmanifest"><link rel="apple-touch-icon" href="icon-180.png"><link rel="icon" href="icon-192.png">
@@ -14,16 +14,11 @@
 <body>
 <div id="app">
 <div id="stage" data-gauge="ring" data-size="m">
-  <video id="video" playsinline muted></video>
-  <canvas id="ov" width="960" height="540"></canvas>
+  <div id="camwrap"><video id="video" playsinline muted></video><canvas id="ov" width="960" height="540"></canvas><canvas id="bev" width="180" height="150"></canvas></div>
   <div id="edgeL" class="edge l"></div><div id="edgeR" class="edge r"></div>
-
-  <button id="carchip" class="glass chip" aria-label="ملف السيارة"></button>
-  <div id="pill" class="pill idle"><i id="dot"></i><span id="status">جاهز</span></div>
   <button id="gear" class="glass round" aria-label="الإعدادات"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg></button>
-  <div id="toast" class="toast"></div>
+  <div id="pill" class="pill idle"><i id="dot"></i><span id="status">جاهز</span></div>
   <div id="hudinfo"></div>
-
   <div id="gaugeBox">
     <div id="spdbox"><svg viewBox="0 0 120 120"><circle class="ring-bg" cx="60" cy="60" r="54"/><circle id="ring-fg" class="ring-fg" cx="60" cy="60" r="54" transform="rotate(-90 60 60)"/></svg>
       <div class="num"><b id="spd">--</b><small>كم/س</small></div></div>
@@ -31,11 +26,9 @@
   </div>
   <div id="chips"></div>
   <div id="gauge"><i id="gmark"></i></div>
-  <canvas id="bev" width="180" height="150"></canvas>
   <div id="rot"><span>دوّر الجوال أفقياً</span></div>
-
   <div id="intro"><div class="introc">
-    <div class="logo">MAUN</div><div class="tag">مساعد القيادة الذكي</div>
+    <img class="logo" src="logo.png" alt="MAUN"><div class="wm">MAUN</div><div class="tag">مساعد القيادة الذكي</div>
     <div id="introcar"></div>
     <div class="row"><button id="start" class="primary">ابدأ</button><label class="btn" for="file">فحص فيديو</label></div>
   </div></div>
@@ -47,19 +40,6 @@
 <aside id="sheet" aria-label="الإعدادات">
   <header><b>الإعدادات</b><button id="sheetx" class="x" aria-label="إغلاق">×</button></header>
   <div id="sheetbody"></div>
-  <div id="tools" hidden>
-    <details class="sec"><summary>أدوات وبيانات</summary>
-      <div class="tools-grid">
-        <button id="cam">كاميرا</button><label class="btn" for="file">فيديو</label><input id="file" type="file" accept="video/*" hidden>
-        <button id="cal">معايرة تلقائية</button><button id="man">معايرة يدوية</button>
-        <button id="pp" style="display:none">إيقاف/تشغيل</button><button id="dbg">المنظور</button>
-        <button id="mlf">موديل من ملف</button><input id="mlfile" type="file" accept=".onnx" hidden><button id="mlu">موديل من رابط</button><button id="mlt">الذكاء</button>
-        <button id="fn">فاتني تنبيه</button><button id="bl">الخطوط غلط</button>
-        <button id="logb">سجل الأحداث</button><button id="sync">رفع الأحداث</button>
-      </div>
-      <div id="log"></div>
-    </details>
-  </div>
 </aside>
 
 <section id="cars" hidden>
@@ -68,6 +48,13 @@
   <div id="carsgrid"></div>
 </section>
 <div id="modal" hidden><form id="carform" autocomplete="off"></form></div>
+
+<!-- عناصر يربطها المحرك (مخفية؛ الواجهة تستدعيها من الإعدادات) -->
+<div id="hid" hidden>
+  <button id="cam"></button><input id="file" type="file" accept="video/*"><button id="cal"></button><button id="man"></button><button id="pp"></button><button id="dbg"></button>
+  <button id="mlf"></button><input id="mlfile" type="file" accept=".onnx"><button id="mlu"></button><button id="mlt"></button>
+  <button id="fn"></button><button id="bl"></button><button id="logb"></button><button id="sync"></button>
+</div>
 
 <script src="engine.js"></script>
 <script src="ui.js"></script>

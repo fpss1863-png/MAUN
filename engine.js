@@ -42,10 +42,12 @@ let model=null,modelP=null,dets=[],detBusy=false,limit=null,limitT=0,ocrBusy=fal
 let auto=true,earlyN=0,devPrev=0,alertOn=false,okRun=0,lastSpeak=0;
 let lastProc=0,fpsN=0,fpsT=0,fpsV=0,gpsT=0,gpsAcc=99;
 function spdOK(){return spd!=null&&performance.now()-gpsT<3000&&gpsAcc<=30}
+let clarity=0,crossN=[0,0],_chipsH='',bevMap=new Int32Array(BW*BH);
+function buildBevMap(){for(let by=0;by<BH;by++)for(let bx=0;bx<BW;bx++){const[x,y]=apply(Hi,bx,by),xi=x|0,yi=y|0;bevMap[by*BW+bx]=(xi>=0&&xi<PW&&yi>=yF&&yi<yN)?yi*PW+xi:-1}}
 function resetState(){S.forEach(s=>Object.assign(s,{c:null,miss:0,rej:0,y:0,cov:1,car:0,seen:false}));
-  acc.fill(0);calib=[];base=null;bad=0;lastOff=null;wasLost=false;laneW=BW/3;alertOn=false;earlyN=0;devPrev=0;okRun=0}
+  acc.fill(0);calib=[];base=null;bad=0;lastOff=null;wasLost=false;laneW=BW/3;alertOn=false;earlyN=0;devPrev=0;okRun=0;crossN=[0,0]}
 function setCalib(p){pts=p;yF=Math.min(p[0][1],p[1][1])|0;yN=Math.max(p[2][1],p[3][1])|0;
-  const d=[[BW/3,0],[BW*2/3,0],[BW*2/3,BH],[BW/3,BH]];Hi=homography(d,p);Hf=homography(p,d);resetState()}
+  const d=[[BW/3,0],[BW*2/3,0],[BW*2/3,BH],[BW/3,BH]];Hi=homography(d,p);Hf=homography(p,d);buildBevMap();resetState()}
 function resetCalib(){pts=[];Hi=null;localStorage.removeItem(calKey);resetState();ah.fill(0);macc.fill(0);aN=0;aFr=0;
   if(auto){$('msg').textContent='معايرة تلقائية: سر على الطريق وخلّ الخطوط ظاهرة…';return}
   $('msg').textContent='اضغط 4 نقاط على خطي مسارك: 1 بعيد-يسار، 2 بعيد-يمين، 3 قريب-يمين، 4 قريب-يسار (فوق الكبوت).'}
@@ -164,8 +166,7 @@ function makeMask(d,relax){
   for(const b of dets){if(!VEH.has(b.class))continue;const[x,y,w,h]=b.bbox;   // السيارات ما تدخل في الكشف
     for(let yy=Math.max(yF,(y-h*.1)|0);yy<Math.min(yN,(y+h*1.1)|0);yy++)for(let xx=Math.max(0,(x-w*.15)|0);xx<Math.min(PW,(x+w*1.15)|0);xx++)mask[yy*PW+xx]=0}}
 function makeBev(){let cL=0,cR=0;
-  for(let by=0;by<BH;by++){for(let bx=0;bx<BW;bx++){const[x,y]=apply(Hi,bx,by),xi=x|0,yi=y|0;
-      bev[by*BW+bx]=(xi>=0&&xi<PW&&yi>=yF&&yi<yN)?mask[yi*PW+xi]:0}
+  for(let by=0;by<BH;by++){for(let bx=0;bx<BW;bx++){const o=bevMap[by*BW+bx];bev[by*BW+bx]=o<0?0:mask[o]}
     const o=by*BW;let bx=0;
     while(bx<BW){if(!bev[o+bx]){bx++;continue}const s=bx;while(bx<BW&&bev[o+bx])bx++;
       if(bx-s>BW*.12){for(let k=s;k<bx;k++)bev[o+k]=0;((s+bx)/2<BW/2)?cL+=bx-s:cR+=bx-s}}}
@@ -252,9 +253,15 @@ function step(){
     const n=accept(s.c,r&&r.c,s.rej);s.rej=(r&&!n)?s.rej+1:0;if(r&&!n)qD++;
     if(n){s.c=blend(s.c,n);s.miss=0;s.cov=.8*s.cov+.2*r.cov;s.y=.8*s.y+.2*r.y;s.seen=true;s.ml=!!r.ml}
     else{s.seen=false;if(!frz&&++s.miss>C.MISS)s.c=null}s.frz=frz}
-  const A=S[0],B=S[1];if(A.seen&&B.seen)qS++;tuneStep();
+  const A=S[0],B=S[1];if(A.seen&&B.seen)qS++;tuneStep();clarity=clarity*.93+.07*((A.seen?.5:0)+(B.seen?.5:0));
   if(A.c&&B.c){const w0=xat(B.c,0)-xat(A.c,0),w1=xat(B.c,BH)-xat(A.c,BH),r0=BW/3;   // الخطين لازم يكوّنون مسار منطقي
     if(w1<.55*r0||w1>1.7*r0||w0<.4*r0||w0>2*r0){const dr=A.cov<B.cov?A:B;dr.c=null;dr.seen=false;dr.miss=99;qD++}}
+  // تغيير مسار: إذا عبرنا خطاً (صار مركز السيارة بعده) ننقل الأدوار بدل التمسك بالمسار القديم
+  const xb=B.c?xat(B.c,BH):null,xa=A.c?xat(A.c,BH):null;
+  crossN[1]=(xb!=null&&xb<BW/2-4)?crossN[1]+1:0;crossN[0]=(xa!=null&&xa>BW/2+4)?crossN[0]+1:0;
+  if(crossN[1]>=3||crossN[0]>=3){const toR=crossN[1]>=3,src=toR?B:A,keep={c:src.c,y:src.y,cov:src.cov,miss:src.miss,ml:src.ml,seen:src.seen};
+    if(toR){Object.assign(A,keep,{rej:0});Object.assign(B,{c:null,miss:99,rej:0,seen:false})}else{Object.assign(B,keep,{rej:0});Object.assign(A,{c:null,miss:99,rej:0,seen:false})}
+    crossN=[0,0];flash=60;bad=0;alertOn=false;okRun=0;lastOff=null;acc.fill(0);logEvt('تغيير مسار')}
   // فقدان كلي: نوقف ونبدأ من جديد
   const lost=!(A.c||B.c)||Math.min(A.miss,B.miss)>C.HOLD;
   if(lost){if(!wasLost){acc.fill(0);base=null;calib=[];bad=0;lastOff=null}S.forEach(s=>{s.c=null;s.rej=0});wasLost=true}
@@ -272,8 +279,8 @@ function step(){
       if(calib.length>=C.CALF)base=calib.slice().sort((a,b)=>a-b)[calib.length>>1]}
     else{const dev=off-base-bias,vel=dev-devPrev,a=Math.abs(dev),dir=dev<0?'اليمين':'اليسار';devPrev=dev;
       $('gmark').style.left=(50-Math.max(-1,Math.min(1,dev/.5))*45)+'%';
-      if(a>C.WARN*SENSF()){bad++;okRun=0}else{bad=0;okRun++}
-      if(!alertOn&&bad>=C.WARNF){alertOn=true;logEvt('انحراف نحو '+dir);saveEv('alert',{dev:off-base,off});speak('انتبه، انحراف نحو '+dir)}
+      if(a>C.WARN*SENSF()&&flash<=0){bad++;okRun=0}else{bad=0;okRun++}
+      if(!alertOn&&bad>=C.WARNF&&clarity>=.4){alertOn=true;logEvt('انحراف نحو '+dir);saveEv('alert',{dev:off-base,off});speak('انتبه، انحراف نحو '+dir)}
       if(alertOn&&okRun>=8)alertOn=false;
       if(alertOn){alert=true;text='⚠ انحراف نحو '+dir+'!';beep(1,650)}
       else if(a>C.EARLY*SENSF()&&vel*dev>0){if(++earlyN>=4){text='اقتربت من خط '+dir;beep(0,1500)}}else earlyN=0}}
@@ -294,7 +301,7 @@ function step(){
   emerg=!!(B.c&&B.cov>.85&&B.y<=.5&&!B.ml&&!lost);
   const sg=ST.signs&&dets.find(v=>v.class=='stop sign'),tl=ST.signs&&dets.find(v=>v.class=='traffic light');
   const chips=mlFresh()?['🧠 ذكاء '+ml.ms+'ms']:[`يسار: ${nm(A)}`,`يمين: ${nm(B)}`];if(emerg)chips.push('🟠 خط طوارئ');if(sg)chips.push('🛑 وقوف');if(tl)chips.push('🚦 إشارة');if(over)chips.push('⚠ تجاوز السرعة');
-  $('chips').innerHTML=chips.map(c=>`<span>${c}</span>`).join('');
+  {const h=chips.map(c=>`<span>${c}</span>`).join('');if(h!==_chipsH){_chipsH=h;$('chips').innerHTML=h}}
   window.UI&&UI.speed(spdOK()?spd:null,limit,!!over);
   setStatus(text+(vw?'  '+vw:''),alert||vw.includes('جداً'));
   window.Assist&&Assist.update();draw(alert,!!vw);
@@ -372,22 +379,22 @@ function loadCal(){const saved=localStorage.getItem(calKey);
 $('start').onclick=async()=>{
   try{actx=actx||new (window.AudioContext||window.webkitAudioContext)();stopSrc();src='cam';calKey='pts-cam-'+Cars.activeId();
     const s=await navigator.mediaDevices.getUserMedia({video:Object.assign({width:{ideal:ST.camH*16/9|0},height:{ideal:ST.camH},frameRate:{ideal:ST.camFps}},ST.camId?{deviceId:{exact:ST.camId}}:{facingMode:{ideal:'environment'}}),audio:false});
-    video.loop=false;video.srcObject=s;await video.play();running=true;$('pp').style.display='none';$('intro').style.display='none';
-    $('stage').style.aspectRatio='16/9';initModel();
+    video.loop=false;video.srcObject=s;await video.play();running=true;$('pp').style.display='none';UI.hideIntro();
+    setAR(16/9);initModel();
     try{await navigator.wakeLock.request('screen')}catch(e){}
     try{gpsId=navigator.geolocation.watchPosition(p=>{gpsT=performance.now();gpsAcc=p.coords.accuracy;spd=p.coords.speed!=null?Math.round(p.coords.speed*3.6):null;window.Radar&&Radar.pos(p.coords)},()=>{},{enableHighAccuracy:true})}catch(e){}
     loadCal();
   }catch(e){$('msg').textContent='ما اشتغلت الكاميرا: '+e.message+' (لازم https وإذن الكاميرا)'}};
 $('file').onchange=e=>{const f=e.target.files[0];if(!f)return;
   actx=actx||new (window.AudioContext||window.webkitAudioContext)();stopSrc();src='file';calKey='pts-file-'+f.name;
-  video.muted=true;video.loop=true;video.src=URL.createObjectURL(f);running=true;$('pp').style.display='';$('intro').style.display='none';
-  video.onloadedmetadata=()=>{$('stage').style.aspectRatio=video.videoWidth/video.videoHeight;video.currentTime=.5;
+  video.muted=true;video.loop=true;video.src=URL.createObjectURL(f);running=true;$('pp').style.display='';UI.hideIntro();
+  video.onloadedmetadata=()=>{setAR(video.videoWidth/video.videoHeight);video.currentTime=.5;
     if(loadCal()||auto)video.play();else video.pause()};initModel()};
 $('pp').onclick=()=>video.paused?video.play():video.pause();
 $('cal').onclick=()=>{if(running){auto=true;resetCalib()}};
 $('man').onclick=()=>{if(running){auto=false;resetCalib();if(src=='file')video.pause()}};
 $('cam').onclick=$('start').onclick;
-$('log').onclick=e=>{const b=e.target.closest('button[data-i]');if(b)learn(+b.dataset.i,b.dataset.l)};
+document.addEventListener('click',e=>{const b=e.target.closest('#log button[data-i]');if(b)learn(+b.dataset.i,b.dataset.l)});
 $('fn').onclick=()=>{C.WARN=Math.max(.12,C.WARN*.9);C.EARLY=Math.min(C.WARN-.04,Math.max(.08,C.EARLY*.92));saveCfg();saveEv('missed');
   $('msg').textContent=`سجّلت إنه فاتك تنبيه. زدت الحساسية (${C.WARN.toFixed(2)}).`};
 $('bl').onclick=()=>{saveEv('badlines');if(running){auto=true;resetCalib();$('msg').textContent='سجّلت إن الخطوط غلط، وأعدت المعايرة.'}};

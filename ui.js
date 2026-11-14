@@ -13,9 +13,10 @@ const fileToDataURL=(f,max=640)=>new Promise((ok,no)=>{const im=new Image(),u=UR
 // ============ الإعدادات (كل خيار يوقف المعالجة فعلياً) ============
 const DEF={lanes:1,showLanes:1,curves:1,cars:1,approach:1,cutin:1,leadmove:1,showSpeed:1,speedSign:1,signs:1,showSigns:1,overspeed:1,
   radar:0,radarDist:500,sound:1,visual:1,vol:.7,sens:'mid',tInfo:'chime',tWarn:'soft',tDanger:'low',gaugeStyle:'ring',gaugeSize:'m',
-  yolo:1,yoloSize:640,yoloConf:.4,yoloNames:'',camId:'',camH:720,camFps:30,procFps:30,showFps:0,showConf:1,fov:65};
+  yolo:1,yoloSize:640,yoloConf:.4,yoloNames:'',camId:'',camH:720,camHeight:1.3,breakOn:1,breakMin:120,showTrip:1,fit:'cover',showTypes:1,camFps:30,procFps:30,showFps:0,showConf:1,fov:65};
 const ST=Object.assign({},DEF);
 Object.defineProperty(ST,'detect',{get(){return !!(this.cars||this.signs)}});
+window.setAR=r=>{UI.ar=r;const w=$('camwrap');w.style.aspectRatio=String(r);w.style.width=ST.fit==='contain'?`min(100vw,calc(100dvh*${r}))`:`max(100vw,calc(100dvh*${r}))`};
 window.SENSF=()=>({low:1.25,mid:1,high:.8}[ST.sens]||1);
 const loadST=id=>{let o={};try{o=JSON.parse(localStorage.getItem('maun_set_'+(id||'default'))||'{}')}catch(e){}Object.assign(ST,DEF,o)};
 const saveST=()=>{try{localStorage.setItem('maun_set_'+Cars.activeId(),JSON.stringify(ST))}catch(e){}};
@@ -43,13 +44,11 @@ window.speak=t=>{if(ST.tDanger==='human')Snd.say(t)};
 document.addEventListener('pointerdown',()=>Snd.unlock());
 
 // ============ التنبيهات المرئية ============
-let toastT=0;
-function toast(text,level,side){if(!ST.visual||!text)return;const t=$('toast');t.textContent=text;t.className='toast on '+(level||'info');
-  clearTimeout(toastT);toastT=setTimeout(()=>t.classList.remove('on'),level==='danger'?3200:2400);
+function toast(text,level,side){if(!ST.visual||!text)return;UI.flash(text,level,level==='danger'?3200:2600);
   if(side){const e=$(side==='L'?'edgeL':'edgeR');e.classList.add('on');setTimeout(()=>e.classList.remove('on'),1600)}}
 const Alert={last:{},log:[],fire(key,level,text,o={}){const now=performance.now(),cd=o.cd||COOL[level];
   if(now-(this.last[key]||-1e9)<cd)return false;this.last[key]=now;this.log.push({key,level,text,t:Date.now()});if(this.log.length>50)this.log.shift();
-  toast(text,level,o.side);Snd.play(level,key,text,true);return true}};
+  toast(text,level,o.side);Snd.play(level,key,o.say||text,true);return true}};
 
 // ============ الرادارات (قائمة يوفرها المستخدم — لا توجد قاعدة بيانات مدمجة) ============
 const hav=(a,b,c,d)=>{const R=6371e3,r=Math.PI/180,x=Math.sin((c-a)*r/2)**2+Math.cos(a*r)*Math.cos(c*r)*Math.sin((d-b)*r/2)**2;return 2*R*Math.asin(Math.sqrt(x))};
@@ -80,31 +79,37 @@ const Assist={tr:[],nid:1,lead:null,leadM:null,dark:false,stopSince:0,armed:fals
     this.tr.forEach(t=>{if(!t.hit)t.miss++});this.tr=this.tr.filter(t=>t.miss<=4&&now-t.h[t.h.length-1].t<1500)},
   vpY(){if(!pts||pts.length<4)return null;const[l0,r0,r1,l1]=pts,a1=(l1[0]-l0[0])/(l1[1]-l0[1]),b1=l0[0]-a1*l0[1],a2=(r1[0]-r0[0])/(r1[1]-r0[1]),b2=r0[0]-a2*r0[1];
     if(!isFinite(a1)||!isFinite(a2)||Math.abs(a1-a2)<1e-6)return null;const y=(b2-b1)/(a1-a2);return y>0&&y<PH?y:null},
-  metrics(t,now){const H=t.h.filter(p=>now-p.t<1400);if(H.length<4)return null;const L=H[H.length-1];if((L.t-H[0].t)<700)return null;
-    const g=slope(H,p=>Math.log(p.w)),f=(PW/2)/Math.tan(ST.fov*Math.PI/360),dW=f*(VEHW[t.cls]||1.8)/L.w,by=L.y+L.h,vp=this.vpY(),dH=vp!=null&&by>vp+5?f*1.3/(by-vp):null;
-    const agree=dH?Math.min(dW,dH)/Math.max(dW,dH):.5,d=Math.max(3,Math.min(150,dH?(dW+dH)/2:dW));
-    const conf=(t.h.length>=6&&L.w>PW*.05&&t.score>.6)?(agree>.75?'جيدة':agree>.5?'متوسطة':'منخفضة'):'منخفضة';
-    return{d,conf,g,ttc:g>.03?1/g:null,L,by,cx:L.x+L.w/2}},
-  rel(m){if(!Hi||wasLost||!(S[0].c||S[1].c))return null;const[bx,by]=apply(Hf,m.cx,m.by);if(by<-30||by>BH+60)return null;
-    const yy=Math.max(0,Math.min(BH,by)),A=S[0],B=S[1],lx=A.c?xat(A.c,yy):xat(B.c,yy)-laneW,rx=B.c?xat(B.c,yy):lx+laneW;return rx-lx<5?null:(bx-lx)/(rx-lx)},
+  metrics(t,now){const H=t.h.filter(p=>now-p.t<1600);if(H.length<5)return null;const L=H[H.length-1];if((L.t-H[0].t)<1000)return null;
+    const g=slope(H,p=>Math.log(p.w)),t0=H[0].t,xs=H.map(p=>(p.t-t0)/1000),ys=H.map(p=>Math.log(p.w)),mx=xs.reduce((a,b)=>a+b,0)/xs.length,my=ys.reduce((a,b)=>a+b,0)/ys.length;
+    let sxy=0,sxx=0,syy=0;xs.forEach((x,i)=>{sxy+=(x-mx)*(ys[i]-my);sxx+=(x-mx)**2;syy+=(ys[i]-my)**2});const r2=syy>1e-9?sxy*sxy/(sxx*syy):0;   // جودة الانحدار: ضجيج الصندوق ما يُحسب اقتراب
+    const f=(PW/2)/Math.tan(ST.fov*Math.PI/360),dW=f*(VEHW[t.cls]||1.8)/L.w,by=L.y+L.h,vp=this.vpY(),dH=vp!=null&&by>vp+5?f*ST.camHeight/(by-vp):null;
+    const agree=dH?Math.min(dW,dH)/Math.max(dW,dH):.5,raw=Math.max(3,Math.min(150,dH?(dW+dH)/2:dW));t.dS=t.dS?t.dS*.7+raw*.3:raw;
+    const big=L.w>=PW*.05,conf=(t.h.length>=6&&big&&t.score>.6&&r2>.5)?(agree>.75?'جيدة':agree>.5?'متوسطة':'منخفضة'):'منخفضة';
+    return{d:t.dS,conf,g,r2,big,ttc:g>.03?1/g:null,L,by,cx:L.x+L.w/2}},
+  rel(m){if(!Hi||wasLost||!(S[0].c||S[1].c))return null;const[bx,by]=apply(Hf,m.cx,m.by);if(by<0||by>BH+60)return null;   // خارج نطاق قراءة المسار: لا نحكم
+    const yy=Math.min(BH,by),A=S[0],B=S[1],lx=A.c?xat(A.c,yy):xat(B.c,yy)-laneW,rx=B.c?xat(B.c,yy):lx+laneW;if(rx-lx<5)return null;
+    const lwImg=Math.abs(apply(Hi,rx,yy)[0]-apply(Hi,lx,yy)[0]),ratio=m.L.w/lwImg;if(ratio<.25||ratio>1.15)return null;   // عرض السيارة لا يطابق عرض المسار = قراءة مشكوك فيها
+    return(bx-lx)/(rx-lx)},
   checkDark(){const c=this.dc||(this.dc=el('canvas'));c.width=16;c.height=9;const x=c.getContext('2d',{willReadFrequently:true});x.drawImage(pc,0,0,16,9);
     const d=x.getImageData(0,0,16,9).data;let s=0;for(let i=0;i<d.length;i+=4)s+=d[i]*.3+d[i+1]*.59+d[i+2]*.11;this.dark=s/144<14},
   update(){const now=performance.now();if(++this.df%30==0)this.checkDark();
     if(!ST.cars||!this.tr.length){this.lead=this.leadM=null;if(ST.leadmove)this.checkLead(null,null,now);return}
-    const lowConf=!(Hi&&!wasLost&&(S[0].c||S[1].c));let lead=null,lm=null;
+    const lowConf=!(Hi&&!wasLost&&(S[0].c||S[1].c))||clarity<.4;let lead=null,lm=null;
     for(const t of this.tr){const m=this.metrics(t,now);t.m=m;if(!m)continue;t.rel=this.rel(m);
-      if(t.rel!=null)t.relH=(t.relH||[]).concat([{t:now,r:t.rel}]).filter(p=>now-p.t<1400);
-      t.inLane=t.rel!=null?(t.rel>.12&&t.rel<.88):(Math.abs(m.cx-PW/2)<PW*.16&&m.by>PH*.55);
-      if(t.inLane&&(!lead||m.d<lm.d)){lead=t;lm=m}}
-    this.lead=lead;this.leadM=lm;if(this.dark)return;   // رؤية ضعيفة: لا نصدر تحذيرات
-    if(lead&&ST.approach)this.approach(lead,lm,lowConf);
+      if(t.rel!=null){t.relH=(t.relH||[]).concat([{t:now,r:t.rel}]).filter(p=>now-p.t<1400);
+        if(t.rel>.2&&t.rel<.8)t.inN=Math.min(6,(t.inN||0)+1);else if(t.rel<.08||t.rel>.92)t.inN=0;else t.inN=Math.max(0,(t.inN||0)-1);t.inLane=t.inN>=3}   // ثبات: لازم تبقى داخل المسار عدة قراءات
+      else t.inLane=Math.abs(m.cx-PW/2)<PW*.14&&m.by>PH*.6&&m.big;
+      if(t.inLane&&m.big&&(!lead||m.d<lm.d)){lead=t;lm=m}}
+    this.lead=lead;this.leadM=lm;if(this.dark)return;
+    if(lead&&ST.approach)this.approach(lead,lm,lowConf||lead.rel==null);
     if(ST.cutin&&!lowConf)for(const t of this.tr)this.cut(t);
     if(ST.leadmove)this.checkLead(lead,lm,now)},
-  approach(t,m,lowConf){if(t.h.length<5||t.score<.55)return;
-    const danger=!lowConf&&t.h.length>=6&&t.score>.6&&m.ttc!=null&&m.g>.07&&m.ttc<2.2&&m.d<70;
-    const headway=spdOK()&&spd>20&&m.d/(spd/3.6)<.9&&m.conf!=='منخفضة';
-    const warn=(m.ttc!=null&&m.g>.05&&m.ttc<3.8&&m.d<80)||headway;
-    if(danger)Alert.fire('appr','danger','انتبه، سيارة قريبة');else if(warn)Alert.fire('appr','warn','السيارة الأمامية تقترب')},
+  approach(t,m,lowConf){if(t.h.length<6||t.score<.55||!m.big||m.r2<.6)return;
+    const headway=spdOK()&&spd>20&&m.conf==='جيدة'&&m.d/(spd/3.6)<.9;
+    if(m.ttc!=null){const vc=m.d*m.g;if(vc<1.5||vc>55)return;   // سرعة الاقتراب لازم تكون منطقية
+      const danger=!lowConf&&m.conf!=='منخفضة'&&m.g>.07&&m.ttc<2.2&&m.d<45,warn=m.g>.05&&m.ttc<3.5&&m.d<50;
+      if(danger){Alert.fire('appr','danger','اقتربت من المركبة',{say:'انتبه، سيارة قريبة'});return}if(warn){Alert.fire('appr','warn','اقتربت من المركبة',{say:'السيارة الأمامية تقترب'});return}}
+    if(headway)Alert.fire('appr','warn','اقتربت من المركبة',{say:'المسافة قريبة'})},
   cut(t){if(!t.m||t.rel==null||t.inLane||!t.relH||t.relH.length<5)return;const H=t.relH,n=H.length;if((H[n-1].t-H[0].t)<700)return;
     const left=t.rel<=.12,v=slope(H,p=>p.r);if(left?v<=.10:v>=-.10)return;
     const mid=H[n>>1],v1=(mid.r-H[0].r)/(((mid.t-H[0].t)/1000)||1),v2=(H[n-1].r-mid.r)/(((H[n-1].t-mid.t)/1000)||1);   // اتجاه ثابت = تغيير مسار حقيقي وليس تمايل
@@ -126,7 +131,18 @@ const Assist={tr:[],nid:1,lead:null,leadM:null,dark:false,stopSince:0,armed:fals
       c.lineWidth=lead||cut?2.5:1.2;c.strokeStyle=cut?'rgba(245,184,75,.95)':lead?'rgba(62,207,142,.95)':'rgba(255,255,255,.35)';rr(c,L.x*k,L.y*k,L.w*k,L.h*k,10);c.stroke();
       if(lead){const lab=`≈ ${Math.round(m.d)} م · ${m.conf}`+(m.ttc&&m.ttc<6?` · ${m.ttc.toFixed(1)} ث`:'');c.font='600 16px system-ui';const w=c.measureText(lab).width+18;
         c.fillStyle='rgba(8,9,10,.7)';rr(c,L.x*k,L.y*k-28,w,24,12);c.fill();c.fillStyle='#e9ebee';c.fillText(lab,L.x*k+9,L.y*k-11)}}}};
-window.Assist=Assist;window.Radar=Radar;
+window.Assist=Assist;
+// ---- صياغة رسمية لحالة القراءة ----
+const FORMAL=[[/^تمام$/,'قراءة واضحة','ok'],[/^(خط واحد|من الذاكرة|لا توجد خطوط|فقدت الخطوط)/,'قراءة غير واضحة','idle'],[/انحراف نحو اليمين/,'انحراف نحو اليمين','alert'],[/انحراف نحو اليسار/,'انحراف نحو اليسار','alert'],
+  [/اقتربت من خط اليمين/,'اقتراب من الخط الأيمن','warn'],[/اقتربت من خط اليسار/,'اقتراب من الخط الأيسر','warn'],[/يتعلم وضعك/,'جارٍ تهيئة القراءة','idle'],[/معايرة تلقائية/,'جارٍ المعايرة','idle'],
+  [/عايِر المسار/,'يرجى معايرة المسار','idle'],[/تغيير مسار/,'تغيير مسار','warn'],[/متوقف/,'تحليل المسارات متوقف','idle']];
+let flashP=null,_paint='',_raw=['جاهز',false];
+function paint(){const now=performance.now();let txt,cls;
+  if(flashP&&now<flashP.until){txt=flashP.text;cls=flashP.level==='danger'?'alert':flashP.level==='warn'?'warn':'ok'}
+  else{flashP=null;const[t,a]=_raw,m=FORMAL.find(x=>x[0].test(t));txt=m?m[1]:t;cls=m?m[2]:(a?'alert':'ok');if(m&&m[1]==='قراءة واضحة'&&clarity<.55){txt='قراءة غير واضحة';cls='idle'}}
+  const k=txt+'|'+cls;if(k===_paint)return;_paint=k;$('status').textContent=txt;$('pill').className='pill '+cls}
+window.setStatus=(t,a)=>{_raw=[t,a];paint()};
+window.Radar=Radar;
 
 
 // ============ YOLO (ONNX Runtime Web) — يُحمَّل من ملف .onnx تصدّره بنفسك ============
@@ -168,6 +184,20 @@ const Yolo={sess:null,busy:false,ms:0,layout:'',nc:0,err:'',fails:0,lastOcr:0,_i
       if(s){this.lastOcr=performance.now();const[x,y,w,h]=s.bbox;ocr({x,y,w,h})}}}};
 window.Yolo=Yolo;
 
+// ============ مدة القيادة وتنبيه الاستراحة ============
+const fmtDur=m=>{m=Math.round(m);const h=Math.floor(m/60),mm=m%60;return h?`${h}:${String(mm).padStart(2,'0')} س`:`${mm} د`};
+const Trip={start:0,lastMove:0,notified:0,
+  load(){try{const o=JSON.parse(localStorage.getItem('maun_trip')||'null');if(o&&Date.now()-o.lastMove<10*60000){this.start=o.start;this.lastMove=o.lastMove;this.notified=o.notified||0}}catch(e){}},
+  save(){try{localStorage.setItem('maun_trip',JSON.stringify({start:this.start,lastMove:this.lastMove,notified:this.notified}))}catch(e){}},
+  reset(){this.start=0;this.notified=0;this.save()},
+  update(){if(!running||src!=='cam')return;const now=Date.now(),gps=spdOK();
+    if(gps){if(spd>8){this.lastMove=now;if(!this.start)this.start=now}else if(this.start&&now-this.lastMove>10*60000)this.reset()}   // توقف 10 دقائق = استراحة
+    else if(!this.start){this.start=now;this.lastMove=now}                                                                      // بدون GPS: نعدّ مدة الجلسة
+    if(!this.start)return;const mins=(now-this.start)/60000;
+    if(ST.breakOn&&mins>=ST.breakMin){const k=Math.floor(mins/ST.breakMin);
+      if(k>this.notified){this.notified=k;Alert.fire('break','warn',`مدة القيادة ${fmtDur(mins)} — يُنصح بأخذ استراحة`,{cd:60000,say:'مدة القيادة طويلة، يُنصح بأخذ استراحة'})}}
+    this.save()}};
+window.Trip=Trip;
 // وضع بدون تحليل المسارات: يبقى عداد السرعة واللوحات والسيارات
 function stepLite(){fn++;if(ST.detect)runDet();
   if(ST.speedSign&&fn%6==0&&!ocrBusy){const b=findSign(pctx.getImageData(0,0,PW,PH).data);if(b)ocr(b)}
@@ -178,35 +208,46 @@ function stepLite(){fn++;if(ST.detect)runDet();
 
 // ============ الواجهة ============
 let lc=0;
-const UI={_k:'',
+const UI={_k:'',ar:16/9,
+  hideIntro(){const i=$('intro');if(i.dataset.out)return;i.dataset.out=1;i.classList.add('out');setTimeout(()=>{i.style.display='none'},520)},
+  flash(text,level,ms){flashP={text,level,until:performance.now()+ms};paint();setTimeout(paint,ms+40)},
+
   speed(v,lim,over){const k=v+'|'+lim+'|'+over;if(k===this._k)return;this._k=k;$('spd').textContent=v==null?'--':v;
     $('ring-fg').style.strokeDashoffset=339.3*(1-(v==null?0:Math.min(1,v/180)));$('limv').textContent=lim||'؟';$('limit').classList.toggle('unk',!lim);
     $('limcap').textContent=lim?'الحد':'الحد غير معروف';$('gaugeBox').classList.toggle('over',!!over)},
   tick(){lc=lc*.7+.3*(((S[0].seen?1:0)+(S[1].seen?1:0))/2);const L=[];
     if(ST.showFps)L.push(`${fpsV} إطار/ث`+(ml.on&&ml.sess?` · ذكاء ${ml.ms}م.ث`:''));
     if(ST.showConf){if(ST.lanes)L.push(`ثقة المسار ${Math.round(lc*100)}%`);if(Assist.leadM)L.push('ثقة المسافة: '+Assist.leadM.conf)}
-    const av=Assist.avail();if(av)L.push(av);if(ST.radar&&Radar.near)L.push(`أقرب رادار: ${Radar.near.d<1000?Math.round(Radar.near.d)+' م':(Radar.near.d/1000).toFixed(1)+' كم'}`);
+    Trip.update();if(ST.showTrip&&Trip.start&&src==='cam')L.push('مدة القيادة '+fmtDur((Date.now()-Trip.start)/60000));const av=Assist.avail();if(av)L.push(av);if(ST.radar&&Radar.near)L.push(`أقرب رادار: ${Radar.near.d<1000?Math.round(Radar.near.d)+' م':(Radar.near.d/1000).toFixed(1)+' كم'}`);
     if(ST.showFps&&ST.detect)L.push(Yolo.active()?`YOLO ${Yolo.ms}م.ث · ${Yolo.layout}`:(model?'COCO-SSD':'كاشف الأجسام غير جاهز'));
     $('hudinfo').innerHTML=L.map(esc).join('<br>');const ys=$('yolostat');if(ys)ys.textContent=Yolo.sess?`محمّل · ${Yolo.layout||'—'} · ${Yolo.nc||'?'} فئة · ${Yolo.ms}م.ث`+(Yolo.err?' · '+Yolo.err:''):'لا يوجد موديل YOLO محمّل.';const c=$('calstat');if(c)c.textContent=Hi?`معايرة سارية — ثقة المسار ${Math.round(lc*100)}%`:'غير معايَر'}};
 window.UI=UI;
 
 function applyST(){const s=$('stage');s.dataset.gauge=ST.gaugeStyle;s.dataset.size=ST.gaugeSize;$('gaugeBox').style.display=ST.showSpeed?'':'none';
-  $('hudinfo').style.display=(ST.showFps||ST.showConf||ST.cars||ST.radar)?'':'none';
+  $('hudinfo').style.display='';
   if(!ST.detect){dets=[];Assist.tr=[];Assist.lead=Assist.leadM=null}else if(running)initModel();
   if(!ST.cars){Assist.tr=[];Assist.lead=Assist.leadM=null}
   if(!ST.lanes)S.forEach(x=>{x.c=null;x.seen=false});
   if(!ST.speedSign){limit=null;UI._k=''}
-  if(!ST.radar)Radar.near=null}
+  if(!ST.radar)Radar.near=null;$('chips').style.display=ST.showTypes?'':'none';$('stage').dataset.fit=ST.fit;setAR(UI.ar||16/9)}
 function changed(k){saveST();applyST();
   if(['camId','camH','camFps'].includes(k)&&running&&src==='cam')$('cam').click();
   if(['tInfo','tWarn','tDanger','vol'].includes(k)){const lv={tInfo:'info',tWarn:'warn',tDanger:'danger',vol:'warn'}[k];Snd.play(lv,'prev',lv==='info'?'السيارة الأمامية تحركت':'انتبه، يوجد خطر محتمل',true)}}
 
 const T3=[['chime','نغمة راقية'],['soft','هادئ وناعم'],['electronic','إلكتروني خفيف'],['low','منخفض'],['human','صوت بشري']];
+const seg=items=>{const w=el('div','seg');for(const[t,f]of items){const b=el('button','',t);b.onclick=f;w.append(b)}return w};
+const lab=t=>el('div','note',t);
+const fillCard=c=>{const a=Cars.active();c.innerHTML=a?`<span class="th" style="${a.img?`background-image:url(${a.img})`:''}"></span><span><b>${esc(a.name)}</b><small>${esc([a.make,a.model].filter(Boolean).join(' · ')||'—')}</small></span><button>تبديل / إدارة</button>`:'<span><b>لا يوجد ملف سيارة</b></span><button>إنشاء</button>';
+  c.querySelector('button').onclick=()=>{openSheet(false);a?openCars():openForm()}};
+const goFullscreen=()=>{const d=document.documentElement,f=d.requestFullscreen||d.webkitRequestFullscreen;if(f)Promise.resolve(f.call(d)).catch(()=>{});else $('msg').textContent='على الآيفون: مشاركة ← إضافة إلى الشاشة الرئيسية، ثم افتحه منها لملء الشاشة'};
 const SCHEMA=[
- {t:'مساعد السائق',open:1,items:[['cars','toggle','اكتشاف السيارات الأمامية'],['approach','toggle','تنبيه الاقتراب من السيارات'],['cutin','toggle','تنبيه تغيير المسار'],['leadmove','toggle','تنبيه تحرك السيارة الأمامية'],
+ {t:'الحساب والملفات',open:1,extra:()=>{const w=el('div'),c=el('div','acard'),h=el('div','acc');c.id='acard';fillCard(c);w.append(c,h);renderAcct(h);return w}},
+ {t:'مساعد السائق',items:[['cars','toggle','اكتشاف السيارات الأمامية'],['approach','toggle','تنبيه الاقتراب من السيارات'],['cutin','toggle','تنبيه تغيير المسار'],['leadmove','toggle','تنبيه تحرك السيارة الأمامية'],
    ['showSpeed','toggle','عرض السرعة الحالية'],['speedSign','toggle','قراءة حدود السرعة'],['overspeed','toggle','تنبيه تجاوز السرعة']],
-   extra:()=>el('div','note','تقدير المسافة من كاميرا واحدة تقريبي وتظهر معه درجة الثقة. تنبيه تحرك الأمامية يحتاج GPS (السرعة صفر). هذه مساعدة للسائق وليست نظام سلامة.')},
- {t:'الطريق',items:[['lanes','toggle','تحليل المسارات'],['showLanes','toggle','إظهار المسارات'],['curves','toggle','اكتشاف المنعطفات']]},
+   extra:()=>lab('تقدير المسافة من كاميرا واحدة تقريبي وتظهر معه درجة الثقة. تنبيه تحرك الأمامية يحتاج GPS (السرعة صفر). هذه مساعدة للسائق وليست نظام سلامة.')},
+ {t:'مدة القيادة والاستراحة',items:[['breakOn','toggle','تنبيه الاستراحة'],['breakMin','select','بعد مدة قيادة',[[30,'30 دقيقة'],[60,'ساعة'],[90,'ساعة ونصف'],[120,'ساعتان'],[150,'ساعتان ونصف'],[180,'3 ساعات'],[240,'4 ساعات']]],['showTrip','toggle','عرض مدة القيادة']],
+   extra:()=>{const w=el('div');w.append(lab('تُحسب المدة من حركة السيارة (GPS)، وتتوقف إذا وقفت أكثر من 10 دقائق.'),seg([['إعادة ضبط المدة',()=>{Trip.reset();$('msg').textContent='تمت إعادة ضبط مدة القيادة'}]]));return w}},
+ {t:'الطريق',items:[['lanes','toggle','تحليل المسارات'],['showLanes','toggle','إظهار المسارات'],['curves','toggle','اكتشاف المنعطفات'],['showTypes','toggle','عرض نوع المسار']]},
  {t:'اللوحات والإشارات',items:[['signs','toggle','إشارة الوقوف وإشارات المرور'],['showSigns','toggle','عرض اللوحات المكتشفة']]},
  {t:'الرادار',items:[['radar','toggle','تنبيه الرادارات من قائمتي'],['radarDist','select','مسافة التنبيه',[[300,'300 م'],[500,'500 م'],[1000,'1 كم']]]],
    extra:()=>{const w=el('div','srow');w.style.flexDirection='column';w.style.alignItems='stretch';const ta=el('textarea');ta.placeholder='lat,lon,الاسم,الحد\n24.7136,46.6753,رادار الدائري,100';
@@ -214,33 +255,35 @@ const SCHEMA=[
      b.onclick=()=>{const a=Radar.parse(ta.value);if(a==null){n.textContent='صيغة غير صالحة';return}Radar.list=a;localStorage.setItem('maun_radars',JSON.stringify(a));n.textContent=`${a.length} رادار محفوظ.`};w.append(ta,b,n);return w}},
  {t:'الصوت والتنبيهات',items:[['sound','toggle','التنبيهات الصوتية'],['visual','toggle','التنبيهات المرئية'],['vol','range','مستوى الصوت',[.1,1,.05]],
    ['sens','select','حساسية التنبيهات',[['low','منخفضة'],['mid','متوسطة'],['high','عالية']]],['tInfo','select','صوت المعلومات',T3],['tWarn','select','صوت التحذير',T3],['tDanger','select','صوت الخطر',T3]]},
- {t:'العداد',items:[['gaugeStyle','select','شكل العداد',[['ring','حلقة'],['minimal','أرقام فقط']]],['gaugeSize','select','حجم العداد',[['s','صغير'],['m','وسط'],['l','كبير']]]]},
- {t:'الكاميرا',items:[['camH','select','جودة الفيديو',[[480,'480p'],[720,'720p'],[1080,'1080p']]],['camFps','select','معدل إطارات الكاميرا',[[15,'15'],[24,'24'],[30,'30']]],['procFps','select','معدل التحليل',[[10,'10'],[15,'15'],[20,'20'],[30,'30']]],['fov','select','زاوية عدسة الجوال',[[55,'55°'],[65,'65°'],[75,'75°'],[85,'85°']]]],
-   extra:()=>{const w=el('div'),r=el('div','srow'),sel=el('select');sel.id='camsel';sel.add(new Option('الخلفية (افتراضي)',''));
-     r.append(el('span','','الكاميرا'),sel);sel.onchange=()=>{ST.camId=sel.value;changed('camId')};
+ {t:'العرض',items:[['gaugeStyle','select','شكل العداد',[['ring','حلقة'],['minimal','أرقام فقط']]],['gaugeSize','select','حجم العداد',[['s','صغير'],['m','وسط'],['l','كبير']]],['fit','select','عرض الكاميرا',[['cover','ملء الشاشة'],['contain','كامل الإطار']]]],
+   extra:()=>seg([['ملء الشاشة (المتصفح)',goFullscreen]])},
+ {t:'الكاميرا والمعايرة',items:[['camH','select','جودة الفيديو',[[480,'480p'],[720,'720p'],[1080,'1080p']]],['camFps','select','معدل إطارات الكاميرا',[[15,'15'],[24,'24'],[30,'30']]],['procFps','select','معدل التحليل',[[10,'10'],[15,'15'],[20,'20'],[30,'30']]],
+   ['fov','select','زاوية عدسة الجوال',[[55,'55°'],[65,'65°'],[75,'75°'],[85,'85°']]],['camHeight','select','ارتفاع الكاميرا عن الأرض',[[1.1,'1.1 م'],[1.2,'1.2 م'],[1.3,'1.3 م'],[1.4,'1.4 م'],[1.5,'1.5 م']]]],
+   extra:()=>{const w=el('div'),r=el('div','srow'),sel=el('select');sel.id='camsel';sel.add(new Option('الخلفية (افتراضي)',''));r.append(el('span','','الكاميرا'),sel);
+     sel.onchange=()=>{ST.camId=sel.value;changed('camId')};
      navigator.mediaDevices&&navigator.mediaDevices.enumerateDevices().then(a=>{a.filter(d=>d.kind==='videoinput').forEach((d,i)=>sel.add(new Option(d.label||'كاميرا '+(i+1),d.deviceId)));sel.value=ST.camId}).catch(()=>{});
-     const s=el('div','note');s.id='calstat';s.textContent=Hi?'معايرة سارية':'غير معايَر';const bw=el('div','tools-grid'),ba=el('button','','معايرة تلقائية'),bm=el('button','','معايرة يدوية');
-     ba.onclick=()=>{$('cal').click();openSheet(false)};bm.onclick=()=>{$('man').click();openSheet(false)};bw.append(ba,bm);w.append(r,s,bw);return w}},
- {t:'YOLO',items:[['yolo','toggle','استخدام YOLO بدل COCO-SSD'],['yoloSize','select','حجم المدخل (نفس imgsz عند التصدير)',[[320,'320'],[416,'416'],[480,'480'],[640,'640']]],['yoloConf','select','حد الثقة',[[.25,'0.25'],[.35,'0.35'],[.45,'0.45'],[.55,'0.55']]]],
-   extra:()=>{const w=el('div'),g=el('div','tools-grid'),f=el('input'),bf=el('button','','موديل من ملف'),bu=el('button','','موديل من رابط'),bd=el('button','','حذف الموديل'),st=el('div','note'),ta=el('textarea');
-     f.type='file';f.accept='.onnx';f.hidden=true;st.id='yolostat';ta.placeholder='أسماء الفئات مفصولة بفاصلة (اتركها فاضية لـ COCO). مثال: car,truck,bus,speed limit';ta.value=ST.yoloNames;ta.style.cssText='width:calc(100% - 36px);margin:0 18px 8px;min-height:60px;background:var(--p2);border:1px solid var(--line);border-radius:10px;padding:8px;font-size:12px;direction:ltr;color:var(--tx)';
-     ta.onchange=()=>{ST.yoloNames=ta.value;changed('yoloNames')};
-     bf.onclick=()=>f.click();f.onchange=async()=>{const x=f.files[0];if(!x)return;$('msg').textContent='جاري قراءة الموديل…';const b=await x.arrayBuffer();try{await idbSet('yolo',b)}catch(e){}Yolo.load(b)};
-     bu.onclick=async()=>{const u=prompt('رابط ملف ONNX (YOLOv8/11)');if(!u)return;try{$('msg').textContent='جاري التنزيل…';const b=await(await fetch(u)).arrayBuffer();try{await idbSet('yolo',b)}catch(e){}Yolo.load(b)}catch(e){$('msg').textContent='فشل التنزيل: '+e.message}};
-     bd.onclick=()=>{Yolo.sess=null;try{idbSet('yolo',null)}catch(e){}$('msg').textContent='تم حذف موديل YOLO. رجعت لـ COCO-SSD.';if(ST.detect)initModel()};
-     g.append(bf,bu,bd);st.textContent='لا يوجد موديل YOLO محمّل.';w.append(g,f,ta,st);return w}},
- {t:'الذكاء والأداء',items:[['showFps','toggle','عرض FPS'],['showConf','toggle','عرض الدقة والثقة']]}];
-const TOOLS=$('tools');
-function renderSettings(){const b=$('sheetbody');document.body.append(TOOLS);b.innerHTML='';
-  for(const sec of SCHEMA){const d=el('details','sec');if(sec.open)d.open=true;d.append(el('summary','',sec.t));
-    for(const[k,type,label,opts]of sec.items){const row=el('div','srow');row.append(el('span','',label));
+     const pp=el('button','','إيقاف / تشغيل الفيديو');pp.id='ppvis';pp.style.cssText='display:none;margin:0 18px 10px';pp.onclick=()=>$('pp').click();
+     const st=el('div','note');st.id='calstat';
+     w.append(lab('مصدر الصورة'),seg([['الكاميرا',()=>{$('cam').click();openSheet(false)}],['فحص فيديو',()=>$('file').click()]]),pp,r,lab('المعايرة'),seg([['تلقائية',()=>{$('cal').click();openSheet(false)}],['يدوية',()=>{$('man').click();openSheet(false)}]]),st);return w}},
+ {t:'نماذج الذكاء',items:[['yolo','toggle','استخدام YOLO بدل COCO-SSD'],['yoloSize','select','حجم مدخل YOLO',[[320,'320'],[416,'416'],[480,'480'],[640,'640']]],['yoloConf','select','حد الثقة',[[.25,'0.25'],[.35,'0.35'],[.45,'0.45'],[.55,'0.55']]]],
+   extra:()=>{const w=el('div'),f=el('input'),st=el('div','note'),ta=el('textarea');f.type='file';f.accept='.onnx';f.hidden=true;st.id='yolostat';st.textContent='لا يوجد موديل YOLO محمّل.';
+     ta.placeholder='أسماء فئات YOLO مفصولة بفاصلة (فاضية = COCO)';ta.value=ST.yoloNames;ta.style.cssText='width:calc(100% - 36px);margin:0 18px 8px;min-height:54px;background:var(--p2);border:1px solid var(--line);border-radius:10px;padding:8px;font-size:12px;direction:ltr;color:var(--tx)';ta.onchange=()=>{ST.yoloNames=ta.value;changed('yoloNames')};
+     f.onchange=async()=>{const x=f.files[0];if(!x)return;$('msg').textContent='جاري قراءة الموديل…';const b=await x.arrayBuffer();try{await idbSet('yolo',b)}catch(e){}Yolo.load(b)};
+     w.append(lab('YOLO'),seg([['من ملف',()=>f.click()],['من رابط',async()=>{const u=prompt('رابط ملف ONNX (YOLOv8/11)');if(!u)return;try{$('msg').textContent='جاري التنزيل…';const b=await(await fetch(u)).arrayBuffer();try{await idbSet('yolo',b)}catch(e){}Yolo.load(b)}catch(e){$('msg').textContent='فشل التنزيل: '+e.message}}],
+       ['حذف',()=>{Yolo.sess=null;try{idbSet('yolo',null)}catch(e){}$('msg').textContent='تم حذف موديل YOLO.';if(ST.detect)initModel()}]]),f,ta,st,
+       lab('موديل المسارات (UFLD v1)'),seg([['من ملف',()=>$('mlf').click()],['من رابط',()=>$('mlu').click()],['تشغيل / إيقاف',()=>$('mlt').click()]]));return w}},
+ {t:'البيانات والتعلم',extra:()=>{const w=el('div'),lg=el('div');lg.id='log';w.append(lab('سجّل ما تلاحظه ليتحسن النظام:'),seg([['فاتني تنبيه',()=>$('fn').click()],['الخطوط غلط',()=>{$('bl').click();openSheet(false)}]]),seg([['سجل الأحداث',()=>$('logb').click()],['رفع الأحداث',()=>$('sync').click()]]),lg);return w}},
+ {t:'متقدم',items:[['showFps','toggle','عرض FPS'],['showConf','toggle','عرض الدقة والثقة']],extra:()=>seg([['نافذة المنظور (فحص)',()=>$('dbg').click()]])}];
+function renderSettings(){const b=$('sheetbody'),open=[...b.querySelectorAll('details[open]')].map(d=>d.firstChild.textContent);b.innerHTML='';
+  for(const sec of SCHEMA){const d=el('details','sec');if(sec.open||open.includes(sec.t))d.open=true;d.append(el('summary','',sec.t));
+    for(const[k,type,label,opts]of(sec.items||[])){const row=el('div','srow');row.append(el('span','',label));
       if(type==='toggle'){const sw=el('button','sw'+(ST[k]?' on':''));sw.setAttribute('role','switch');sw.onclick=()=>{ST[k]=ST[k]?0:1;sw.classList.toggle('on',!!ST[k]);changed(k)};row.append(sw)}
       else if(type==='select'){const s=el('select');for(const[v,t]of opts)s.add(new Option(t,v));s.value=String(ST[k]);s.onchange=()=>{ST[k]=isNaN(+s.value)||s.value===''?s.value:+s.value;changed(k)};row.append(s)}
       else{const r=el('input');r.type='range';[r.min,r.max,r.step]=opts;r.value=ST[k];r.onchange=()=>{ST[k]=+r.value;changed(k)};row.append(r)}
       d.append(row)}
-    if(sec.extra)d.append(sec.extra());b.append(d)}
-  b.append(TOOLS);TOOLS.hidden=false}
-const openSheet=o=>{$('sheet').classList.toggle('on',o);$('scrim').classList.toggle('on',o)};
+    if(sec.extra)d.append(sec.extra());b.append(d)}}
+function refreshSheet(){const p=$('ppvis');if(p)p.style.display=src==='file'?'':'none';const c=$('calstat');if(c)c.textContent=Hi?`معايرة سارية — ثقة المسار ${Math.round(lc*100)}%`:'غير معايَر';renderChip()}
+const openSheet=o=>{$('sheet').classList.toggle('on',o);$('scrim').classList.toggle('on',o);if(o)refreshSheet()};
 
 // ============ ملفات السيارات ============
 const COLORS=[['أسود','#111'],['أبيض','#f4f4f4'],['فضي','#b9bec4'],['رمادي','#6b7077'],['أحمر','#c0392b'],['أزرق','#2f5fb3'],['أخضر','#2e7d5b'],['ذهبي','#b8964b'],['بني','#6b4a32'],['برتقالي','#d9782d']];
@@ -260,8 +303,7 @@ const Cars={list:[],act:'',
       d.innerHTML=`<div class="im" style="${c.img?`background-image:url(${c.img})`:''}">${c.img?'':'🚗'}</div><div class="tx"><b>${esc(c.name)}</b><small>${col?`<i class="dot" style="background:${col}"></i>`:''}${esc([c.make,c.model].filter(Boolean).join(' · ')||'—')}</small></div>${c.id===this.act?'<span class="badge">نشطة</span>':''}<button class="ed" aria-label="تعديل">✎</button>`;
       d.onclick=()=>{this.setActive(c.id);closeCars()};d.querySelector('.ed').onclick=e=>{e.stopPropagation();openForm(c)};g.append(d)}
     const a=el('div','card add','<div><span>＋</span>سيارة جديدة</div>');a.onclick=()=>openForm();g.append(a)}};
-function renderChip(){const c=Cars.active(),b=$('carchip');
-  b.innerHTML=c?`<span class="th" style="${c.img?`background-image:url(${c.img})`:''}">${c.img?'':'🚗'}</span><span class="nm"><b>${esc(c.name)}</b><small>${esc([c.make,c.model].filter(Boolean).join(' '))}</small></span>`:'<span class="th">＋</span><span class="nm"><b>ملف سيارة</b></span>'}
+function renderChip(){const c=$('acard');if(c)fillCard(c)}
 function renderIntro(){const c=Cars.active(),has=Cars.list.length,box=$('introcar');
   document.querySelector('#intro .row').style.display=has?'':'none';
   if(!has){box.innerHTML='<p style="color:var(--mu);margin:0 0 14px;font-size:14px">أهلاً بك. ابدأ بإنشاء ملف لسيارتك.</p><button class="primary" id="mk1">إنشاء ملف السيارة الأول</button>'+(Cloud.ready()?'<div style="margin-top:12px"><button class="btn" id="haveacct">لدي حساب في MAUN</button></div>':'');$('mk1').onclick=()=>openForm();if($('haveacct'))$('haveacct').onclick=openCars}
@@ -314,19 +356,20 @@ const Cloud={url:(MC.SUPABASE_URL||'').replace(/\/$/,''),key:MC.SUPABASE_ANON_KE
         for(let i=0;i<e.imgs.length;i++){const p=`${this.uid()}/${e.t}_${i}.jpg`;await this.put('snapshots',p,await(await fetch(e.imgs[i])).blob());paths.push(p)}
         await this.rest('events',{method:'POST',headers:{Prefer:'return=minimal'},body:JSON.stringify({car_id:Cars.act||null,t:new Date(e.t).toISOString(),kind:e.kind,label:e.label,dev:e.dev==null?null:e.dev,off:e.off==null?null:e.off,params:{...e.params,ml:e.ml,src:e.src,spd:e.spd,limit:e.limit},paths})});
         e.sent=true;await evdb.put(e);n++}$('msg').textContent=`تم رفع ${n} حدث.`}catch(x){$('msg').textContent='فشل الرفع: '+x.message}}};
-function renderAcct(){const a=$('acct');a.innerHTML='';
+function renderAcct(host){const a=host||$('acct');a.innerHTML='';
   if(!Cloud.ready()){a.innerHTML='الملفات محفوظة على هذا الجهاز فقط. لتفعيل الحساب والمزامنة أضف مفاتيح Supabase في config.js.';return}
   if(Cloud.authed()){const s=el('span','','الحساب: '+esc(Cloud.sess.user&&Cloud.sess.user.email||'')),b=el('button','','مزامنة'),o=el('button','','خروج');
-    b.onclick=()=>Cloud.syncCars().then(()=>$('msg').textContent='تمت المزامنة').catch(e=>$('msg').textContent='تعذرت المزامنة: '+e.message);o.onclick=()=>{Cloud.signOut();renderAcct()};a.append(s,b,o);return}
+    b.onclick=()=>Cloud.syncCars().then(()=>$('msg').textContent='تمت المزامنة').catch(e=>$('msg').textContent='تعذرت المزامنة: '+e.message);o.onclick=()=>{Cloud.signOut();renderAcct(host)};a.append(s,b,o);return}
   const em=el('input'),pw=el('input'),i=el('button','','دخول'),u=el('button','','إنشاء حساب'),m=el('span');em.type='email';em.placeholder='البريد';pw.type='password';pw.placeholder='كلمة المرور';
-  const go=fn=>async()=>{try{m.textContent='...';await fn(em.value.trim(),pw.value);await Cloud.syncCars();renderAcct()}catch(e){m.textContent=e.message}};
+  const go=fn=>async()=>{try{m.textContent='...';await fn(em.value.trim(),pw.value);await Cloud.syncCars();renderAcct(host)}catch(e){m.textContent=e.message}};
   i.onclick=go((e,p)=>Cloud.signIn(e,p));u.onclick=go((e,p)=>Cloud.signUp(e,p));a.append(em,pw,i,u,m)}
 
 // ============ تشغيل ============
 $('gear').onclick=()=>openSheet(true);$('sheetx').onclick=()=>openSheet(false);$('scrim').onclick=()=>openSheet(false);
-$('carchip').onclick=openCars;$('carsx').onclick=closeCars;$('sync').onclick=()=>Cloud.syncEvents();
+$('carsx').onclick=closeCars;$('sync').onclick=()=>Cloud.syncEvents();
 $('dbg').addEventListener('click',()=>{});
-Cars.load();Cloud.init();Radar.load();loadST(Cars.act);applyST();renderChip();renderIntro();renderSettings();
+(()=>{const m=$('msg');let t;new MutationObserver(()=>{m.classList.add('show');clearTimeout(t);t=setTimeout(()=>m.classList.remove('show'),6500)}).observe(m,{childList:true,characterData:true,subtree:true})})();
+setAR(16/9);Trip.load();Cars.load();Cloud.init();Radar.load();loadST(Cars.act);applyST();renderChip();renderIntro();renderSettings();
 if(Cloud.authed())Cloud.syncCars().catch(()=>{});
 setInterval(()=>{if(!running&&UI.tick)UI.tick()},2000);
 if(!Cars.list.length)setTimeout(()=>{},0);
