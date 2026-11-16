@@ -296,7 +296,7 @@ function renderSettings(){const b=$('sheetbody'),open=[...b.querySelectorAll('de
       else if(type==='select'){const s=el('select');for(const[v,t]of opts)s.add(new Option(t,v));s.value=String(ST[k]);if(s.value===''&&ST[k]!==''){s.add(new Option(String(ST[k]),ST[k]));s.value=String(ST[k])}s.onchange=()=>{ST[k]=isNaN(+s.value)||s.value===''?s.value:+s.value;changed(k)};row.append(s)}
       else{const r=el('input');r.type='range';[r.min,r.max,r.step]=opts;r.value=ST[k];r.onchange=()=>{ST[k]=+r.value;changed(k)};row.append(r)}
       d.append(row)}
-    if(sec.extra)d.append(sec.extra());b.append(d)}b.append(el('div','ver','V 1.0'))}
+    if(sec.extra)d.append(sec.extra());b.append(d)}b.append(el('div','ver','V 1.1'))}
 function refreshSheet(){const c=$('calstat');if(c)c.textContent=Hi?`معايرة سارية — ثقة المسار ${Math.round(lc*100)}%`:'غير معايَر';renderChip()}
 const openSheet=o=>{$('sheet').classList.toggle('on',o);$('scrim').classList.toggle('on',o);if(o)refreshSheet()};
 

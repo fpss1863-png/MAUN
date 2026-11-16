@@ -1,3 +1,4 @@
+
 const C={PW:480,PH:270,BW:180,BH:150,P:91,MINL:110,SM:.25,MISS:12,HOLD:12,CAR:350,EARLY:.15,WARN:.22,WARNF:6,CALF:45,NEAR:.8};
 const cfg0=JSON.parse(localStorage.getItem('lanecfg')||'{}');   // ما تعلّمه الموقع من تصحيحاتك
 for(const k of['WARN','EARLY','P'])if(typeof cfg0[k]=='number')C[k]=cfg0[k];
@@ -50,7 +51,7 @@ function setCalib(p){pts=p;yF=Math.min(p[0][1],p[1][1])|0;yN=Math.max(p[2][1],p[
   const d=[[BW/3,0],[BW*2/3,0],[BW*2/3,BH],[BW/3,BH]];Hi=homography(d,p);Hf=homography(p,d);buildBevMap();resetState()}
 let triedLast=false,tessA=null;
 function saveCal(p){const s=JSON.stringify(p);localStorage.setItem(calKey,s);localStorage.setItem('pts-last-'+calKey,s)}
-function resetCalib(){hoodReset();pts=[];Hi=null;triedLast=false;localStorage.removeItem(calKey);resetState();ah.fill(0);macc.fill(0);aN=0;aFr=0;
+function resetCalib(){mlSkip=0;adAcc.length=0;hoodReset();pts=[];Hi=null;triedLast=false;localStorage.removeItem(calKey);resetState();ah.fill(0);macc.fill(0);aN=0;aFr=0;
   if(auto){$('msg').textContent='معايرة تلقائية: سر على الطريق وخلّ الخطوط ظاهرة…';return}
   $('msg').textContent='اضغط 4 نقاط على خطي مسارك: 1 بعيد-يسار، 2 بعيد-يمين، 3 قريب-يمين، 4 قريب-يسار (فوق الكبوت).'}
 ov.addEventListener('pointerdown',e=>{if(Hi||!running||auto)return;
@@ -98,25 +99,27 @@ async function loadML(buf,wasmOnly){try{
   if(!ml.sess)ml.sess=await ort.InferenceSession.create(buf,{executionProviders:['wasm']});
   ml.on=true;ml.fails=0;ml.pick=null;ml.gerr=0;
   $('msg').textContent='موديل الذكاء جاهز ('+(ml.ep=='webgpu'?'كرت الشاشة':'المعالج')+')'+(ml.ep=='webgpu'?'':(wasmOnly?' — رجعت للمعالج: '+(ml.err||''):!navigator.gpu?' — المتصفح لا يدعم WebGPU':' — فشل كرت الشاشة: '+(ml.gpuErr||'سبب غير معروف')))+'.'}catch(e){ml.sess=null;$('msg').textContent='تعذر تحميل الموديل: '+String(e.message||e).slice(0,80)}}
-function decodeUFLD(d,dims){const n=dims.length,G1=dims[n-3],R=dims[n-2],L=dims[n-1],G=G1-1,cw=799/(G-1),lanes=[];
+function decodeUFLD(d,dims,cr){cr=cr||{y0f:0,shf:1};const n=dims.length,G1=dims[n-3],R=dims[n-2],L=dims[n-1],G=G1-1,cw=799/(G-1),lanes=[];
   const anc=R==56?[...Array(56)].map((_,k)=>64+4*k):R==18?[121,131,141,151,161,171,181,191,201,211,221,231,241,251,261,271,281,287]
     :[...Array(R)].map((_,r)=>Math.round(288*(.4+.6*r/(R-1))));
   for(let l=0;l<L;l++){const pts=[];
     for(let r=0;r<R;r++){let mx=-1e9,am=0;for(let g=0;g<G1;g++){const v=d[(g*R+r)*L+l];if(v>mx){mx=v;am=g}}
       if(am==G)continue;let sm=0,e=0;for(let g=0;g<G;g++){const p=Math.exp(d[(g*R+r)*L+l]-mx);sm+=p;e+=p*(g+1)}
-      pts.push([e/sm*cw*PW/800-1,PH*anc[r]/288-1])}
+      pts.push([e/sm*cw*PW/800-1,PH*(cr.y0f+cr.shf*anc[r]/288)-1])}
     lanes.push(pts.length>2?pts:null)}
   return lanes}
-function mlPick(lanes){let Lp=null,Rp=null,lx=-1e9,rx=1e9;      // أقرب خطين لمركز الصورة = مسارك
+function mlPick(lanes){const cx0=refX();let Lp=null,Rp=null,lx=-1e9,rx=1e9;      // أقرب خطين لمركز الصورة = مسارك
   for(const p of lanes){if(!p)continue;const[,a,b]=polyfit(p.map(q=>q[1]),p.map(q=>q[0]),1),x=a*PH*C.NEAR+b;
-    if(x<PW/2-8&&x>lx){lx=x;Lp=p}if(x>PW/2+8&&x<rx){rx=x;Rp=p}}
+    if(x<cx0-8&&x>lx){lx=x;Lp=p}if(x>cx0+8&&x<rx){rx=x;Rp=p}}
   return{L:Lp,R:Rp}}
 async function runML(){if(!ml.sess||!ml.on||ml.busy)return;ml.busy=true;const t0=performance.now();
-  try{const[H,W]=ML_SIZES[ml.si];mc.width=W;mc.height=H;mctx.drawImage(video,0,0,W,H);
+  try{const[H,W]=ML_SIZES[ml.si];mc.width=W;mc.height=H;const vw=video.videoWidth,vh=video.videoHeight,cr={y0f:0,shf:1};
+    if(ML_CROP&&vw&&vh){cr.shf=Math.min(1,vw*H/W/vh);const vp=Hi&&pts.length==4?vpOf(pts)[1]/PH:.5;cr.y0f=Math.max(0,Math.min(1-cr.shf,vp-.38*cr.shf))}   // الأفق عند 38% من الشريط كما في بيانات التدريب
+    mctx.drawImage(video,0,cr.y0f*vh,vw,cr.shf*vh,0,0,W,H);
     const px=mctx.getImageData(0,0,W,H).data,n=W*H,f=new Float32Array(3*n);
     for(let i=0;i<n;i++){f[i]=(px[i*4]/255-.485)/.229;f[n+i]=(px[i*4+1]/255-.456)/.224;f[2*n+i]=(px[i*4+2]/255-.406)/.225}
     const out=await ml.sess.run({[ml.sess.inputNames[0]]:new ort.Tensor('float32',f,[1,3,H,W])}),t=out[ml.sess.outputNames[0]];
-    ml.lanes=decodeUFLD(t.data,t.dims);ml.pick=mlPick(ml.lanes);ml.t=performance.now();ml.ms=Math.round(ml.t-t0);ml.fails=0}
+    ml.lanes=decodeUFLD(t.data,t.dims,cr);ml.pick=mlPick(ml.lanes);smoothLines();ml.t=performance.now();ml.ms=Math.round(ml.t-t0);ml.fails=0}
   catch(e){ml.err=String(e.message||e).slice(0,80);
     if(ml.ep=='webgpu'&&ml.buf&&++ml.gerr>=2){ml.busy=false;ml.on=false;loadML(ml.buf,true);return}
     ml.si=(ml.si+1)%ML_SIZES.length;
@@ -129,8 +132,8 @@ function mlLine(i){const p=ml.pick&&(i?ml.pick.R:ml.pick.L);if(!p)return null;co
   if(Math.abs(c[0])>3e-3||Math.abs(c[1])>.9||Math.abs(2*c[0]*BH+c[1])>.9)return null;
   return{c,cov:.5,y:0,ml:true}}
 function mlCalStep(){if(!ml.pick||ml.t===mlLastT)return;mlLastT=ml.t;
-  const fit=p=>{const[,a,b]=polyfit(p.map(q=>q[1]),p.map(q=>q[0]),1);return[a,b]};
-  if(ml.pick.L&&ml.pick.R)mlAcc.push([...fit(ml.pick.L),...fit(ml.pick.R),Math.max(...ml.pick.L.map(q=>q[1]),...ml.pick.R.map(q=>q[1]))]);
+  const fit=p=>nearFit(p);
+  if(ml.pick.L&&ml.pick.R&&((straightOK(ml.pick.L)&&straightOK(ml.pick.R))||++mlSkip>30))mlAcc.push([...fit(ml.pick.L),...fit(ml.pick.R),Math.max(...ml.pick.L.map(q=>q[1]),...ml.pick.R.map(q=>q[1]))]);
   if(mlAcc.length<8)return;
   const med=k=>mlAcc.map(r=>r[k]).sort((p,q)=>p-q)[mlAcc.length>>1];
   const[aL,bL,aR,bR]=[0,1,2,3].map(med),lw=mlAcc.map(r=>r[4]).sort((p,q)=>p-q),low=lw[lw.length>>2]-PH*.03;mlAcc.length=0;   // حافة قريبة محافظة: ما نثق بنقاط الموديل فوق الكبوت
@@ -331,7 +334,8 @@ function step(){
 }
 function draw(alert,warn){
   octx.clearRect(0,0,OW,OH);const A=S[0],B=S[1];
-  if((A.c||B.c)&&ST.showLanes){const ys=[...Array(24)].map((_,i)=>i*BH/23);
+  const mlOK=ST.showLanes&&mlFresh()&&drawML(alert,warn);
+  if(!mlOK&&(A.c||B.c)&&ST.showLanes){const ys=[...Array(24)].map((_,i)=>i*BH/23);
     const lxf=y=>A.c?xat(A.c,y):xat(B.c,y)-laneW,rxf=y=>B.c?xat(B.c,y):xat(A.c,y)+laneW;
     const P=(x,y)=>{const[a,b]=apply(Hi,x,y);return[a*K,b*K]};
     const rgb=alert?'239,91,91':warn?'245,184,75':'62,207,142';
@@ -360,9 +364,56 @@ function loop(){requestAnimationFrame(loop);
   const _n=performance.now();if(_n-lastProc<1000/ST.procFps-3)return;lastProc=_n;fpsN++;if(_n-fpsT>1000){fpsV=fpsN;fpsN=0;fpsT=_n;window.UI&&UI.tick()}
   pctx.drawImage(video,0,0,PW,PH);runML();
   if(++rc%15==0){sctx.drawImage(video,0,0,320,180);ring.push(sc.toDataURL('image/jpeg',.6));if(ring.length>8)ring.shift()}
-  if(Hi)step();
+  if(Hi){step();if(auto&&!alertOn)adaptStep()}
   else if(auto){octx.clearRect(0,0,OW,OH);setStatus('معايرة تلقائية '+Math.min(99,Math.round(aN/14*100))+'%',false);hoodStep();(ml.sess&&ml.on)?mlCalStep():autoStep()}
   else{idle();setStatus('عايِر المسار (4 نقاط)',false)}}
+
+// ---------- V1.1: معايرة متكيّفة + رسم خطوط من الموديل ----------
+const ML_CROP=true;   // يقص شريط بنسبة 2.78:1 (نسبة تدريب CULane) بدل ضغط الصورة كلها. غيّرها false للرجوع للطريقة القديمة
+let mlSkip=0,adLast=0,adT=0;const adAcc=[],SM={L:null,R:null};
+function nearFit(p){const q=[...p].sort((u,v)=>v[1]-u[1]),s=q.slice(0,Math.max(5,Math.round(q.length*.7))),[,a,b]=polyfit(s.map(r=>r[1]),s.map(r=>r[0]),1);return[a,b]}
+function straightOK(p){const[a,b]=nearFit(p);let e=0;for(const[x,y]of p)e+=Math.abs(x-(a*y+b));return e/p.length<PW*.012}   // نعاير على مقاطع مستقيمة فقط
+function vpOf(p){const aL=(p[0][0]-p[3][0])/(p[0][1]-p[3][1]),bL=p[3][0]-aL*p[3][1],aR=(p[1][0]-p[2][0])/(p[1][1]-p[2][1]),bR=p[2][0]-aR*p[2][1];
+  if(Math.abs(aL-aR)<1e-6)return[PW/2,PH*.5];const y=(bR-bL)/(aL-aR);return[aL*y+bL,y]}   // نقطة التلاشي من شبه المنحرف
+function refX(){if(!Hi||pts.length!=4)return PW/2;   // محور السيارة في الصورة (يدعم كاميرا غير متمركزة)
+  const mt=[(pts[0][0]+pts[1][0])/2,(pts[0][1]+pts[1][1])/2],mb=[(pts[2][0]+pts[3][0])/2,(pts[2][1]+pts[3][1])/2];
+  if(Math.abs(mb[1]-mt[1])<1)return PW/2;return mb[0]+(mt[0]-mb[0])*(PH*C.NEAR-mb[1])/(mt[1]-mb[1])}
+function adaptStep(){   // يتكيف مع ميل الكاميرا وعرض المسار فقط، ولا يلمس الموقع الجانبي حتى لا يخفي انحرافك
+  if(!mlFresh()||!ml.pick.L||!ml.pick.R||ml.t===adLast||pts.length!=4)return;adLast=ml.t;
+  if(!(straightOK(ml.pick.L)&&straightOK(ml.pick.R)))return;
+  const[aL,bL]=nearFit(ml.pick.L),[aR,bR]=nearFit(ml.pick.R),yn=pts[2][1],vy=(bR-bL)/(aL-aR),w=(aR*yn+bR)-(aL*yn+bL);
+  if(!(aR>aL)||vy<PH*.1||vy>yn-30||w<PW*.15||w>PW*.95)return;
+  adAcc.push([vy,w]);if(adAcc.length>40)adAcc.shift();
+  const now=performance.now();if(adAcc.length<24||now-adT<15000)return;
+  const med=k=>adAcc.map(r=>r[k]).sort((p,q)=>p-q)[adAcc.length>>1],vyM=med(0),wM=med(1),[vx,vy0]=vpOf(pts),w0=pts[2][0]-pts[3][0];
+  adT=now;if(Math.abs(vyM-vy0)<PH*.035&&Math.abs(wM-w0)/w0<.12)return;
+  const vyN=.5*vy0+.5*vyM,wN=.5*w0+.5*wM,cx=(pts[2][0]+pts[3][0])/2,xl=cx-wN/2,xr=cx+wN/2,yf=vyN+.5*(yn-vyN);
+  if(vyN>yn-30)return;
+  const lx=y=>xl+(y-yn)*(vx-xl)/(vyN-yn),rx=y=>xr+(y-yn)*(vx-xr)/(vyN-yn),p=[[lx(yf),yf],[rx(yf),yf],[xr,yn],[xl,yn]];
+  if(p.some(([x,y])=>x<0||x>PW||y<0||y>PH))return;
+  adAcc.length=0;saveCal(p);setCalib(p);$('msg').textContent='عدّلت المعايرة تلقائياً.'}
+function smoothLines(){for(const k of['L','R']){const p=ml.pick&&ml.pick[k],o=SM[k];
+  if(!p||p.length<4){if(o&&performance.now()-o.t>1200)SM[k]=null;continue}
+  const ys=p.map(q=>q[1]),xs=p.map(q=>q[0]),c=polyfit(ys,xs,p.length>=7?2:1),y0=Math.min(...ys),y1=Math.max(...ys),t=performance.now();
+  SM[k]=o?{c:c.map((v,i)=>.5*o.c[i]+.5*v),y0:.5*o.y0+.5*y0,y1:.5*o.y1+.5*y1,t}:{c,y0,y1,t}}}
+function drawML(alert,warn){const L=SM.L,R=SM.R;if(!L&&!R)return false;
+  const yb=Math.min(PH-2,(yN||PH)+PH*.03),ev=(s,y)=>{const[a,b,c]=s.c;if(y<=s.y1)return a*y*y+b*y+c;const x1=a*s.y1*s.y1+b*s.y1+c;return x1+(2*a*s.y1+b)*(y-s.y1)};
+  if(yb-(L&&R?Math.max(L.y0,R.y0):(L||R).y0)<20)return false;
+  const n=20,col=i=>(emerg&&i==1)?'#fb923c':S[i].y>.5?'#facc15':'#f8fafc',rgb=alert?'239,91,91':warn?'245,184,75':'62,207,142';
+  if(L&&R){const yt=Math.max(L.y0,R.y0),ys=[...Array(n)].map((_,i)=>yt+(yb-yt)*i/(n-1)),g=octx.createLinearGradient(0,yb*K,0,yt*K);
+    g.addColorStop(0,`rgba(${rgb},.45)`);g.addColorStop(1,`rgba(${rgb},0)`);
+    octx.beginPath();ys.forEach((y,i)=>{const x=ev(L,y)*K;i?octx.lineTo(x,y*K):octx.moveTo(x,y*K)});
+    for(let i=n-1;i>=0;i--)octx.lineTo(ev(R,ys[i])*K,ys[i]*K);
+    octx.closePath();octx.fillStyle=g;octx.fill();
+    for(const t of[.3,.5,.7,.88]){const y=yt+(yb-yt)*t,xl=ev(L,y),xr=ev(R,y),m=(xl+xr)/2,w=(xr-xl)*.15,h=w*.5;
+      octx.beginPath();octx.moveTo((m-w)*K,(y+h)*K);octx.lineTo(m*K,y*K);octx.lineTo((m+w)*K,(y+h)*K);
+      octx.strokeStyle=`rgba(255,255,255,${.25+.5*t})`;octx.lineWidth=2+5*t;octx.lineCap='round';octx.lineJoin='round';octx.stroke()}}
+  [L,R].forEach((s,i)=>{if(!s)return;const age=performance.now()-s.t,c=col(i),yt=s.y0;
+    octx.save();octx.shadowColor=c;octx.shadowBlur=12;octx.strokeStyle=c;octx.lineCap='round';
+    for(let j=0;j<n-1;j++){const ya=yt+(yb-yt)*j/(n-1),yc=yt+(yb-yt)*(j+1)/(n-1),t=j/(n-1);
+      octx.globalAlpha=(.3+.7*t)*(age>600?Math.max(.25,1-(age-600)/900):1);octx.lineWidth=2+5*t;
+      octx.beginPath();octx.moveTo(ev(s,ya)*K,ya*K);octx.lineTo(ev(s,yc)*K,yc*K);octx.stroke()}octx.restore()});
+  return true}
 
 // ---------- كشف الكبوت: الصفوف السفلية الثابتة بين الفريمات (الكبوت ثابت والطريق يتحرك) ----------
 const HY0=Math.round(PH*.5),hm=new Float32Array(PH);let hn=0,hg=null,hk=0,hoodY=null;
